@@ -1,0 +1,24 @@
+# Wi-Fi Nightmare Configuration
+
+scanning:
+  channel_hop_interval: 0.5  # seconds
+  timeout: 60
+  
+attacks:
+  deauth_packets: 50
+  handshake_timeout: 120
+  pmkid_timeout: 30
+
+database:
+  path: "./wifi_db.json"
+  auto_backup: true
+  backup_count: 5
+
+esp32:
+  baudrate: 115200
+  timeout: 10
+  
+output:
+  cracked_passwords: "./cracked.txt"
+  handshakes_dir: "handshakes"
+  log_file: "logs/wifinightmare.log"

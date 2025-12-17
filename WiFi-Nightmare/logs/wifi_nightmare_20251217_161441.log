@@ -1,0 +1,4 @@
+2025-12-17 16:14:41 - WiFiNightmare - DEBUG - logger.py:76 - Logging to file: E:\programming\python\Projects\TangentNetwork\WiFiNightmare\logs\wifi_nightmare_20251217_161441.log
+2025-12-17 16:14:41 - WiFiNightmare - [0;31mERROR[0m - database.py:32 - Failed to load database: Expecting value: line 1 column 1 (char 0)
+2025-12-17 16:14:41 - WiFiNightmare - [0;31mERROR[0m - database.py:32 - Failed to load database: Expecting value: line 1 column 1 (char 0)
+2025-12-17 16:14:41 - WiFiNightmare - [0;31mERROR[0m - database.py:32 - Failed to load database: Expecting value: line 1 column 1 (char 0)
