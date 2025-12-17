@@ -1,0 +1,27 @@
+# WiFi-Nightmare - Python Dependencies
+# WiFi Security Auditing Tool
+# Python 3.8+ required
+
+# Core packet manipulation and network analysis
+scapy>=2.5.0
+
+# Serial communication with ESP32/NodeMCU
+pyserial>=3.5
+
+# Configuration management
+PyYAML>=6.0
+
+# Note: System dependencies (install via package manager):
+# - aircrack-ng (for handshake cracking)
+# - wireless-tools (iwconfig, iwlist)
+# - iw (modern wireless configuration)
+# - python3-dev (for some scapy dependencies)
+#
+# Debian/Ubuntu:
+#   sudo apt-get install aircrack-ng wireless-tools iw python3-dev
+#
+# Arch Linux:
+#   sudo pacman -S aircrack-ng wireless_tools iw
+#
+# Fedora/RHEL:
+#   sudo dnf install aircrack-ng wireless-tools iw python3-devel

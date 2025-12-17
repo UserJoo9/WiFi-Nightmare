@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../ESP32-Deauther-master"
+		},
+		{
+			"name": "ESP32-Deauther-master-v2",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
