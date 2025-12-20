@@ -71,7 +71,7 @@ C_RESET = "\033[0m"
 
 # --- Project Identity ---
 APP_NAME = "Wi-Fi Nightmare"
-VERSION = "2.0"
+VERSION = "2.0.1"
 AUTHOR = "Youssef Alkhodary"
 
 # --- ASCII Art Banner ---
