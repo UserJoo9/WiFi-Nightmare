@@ -70,7 +70,7 @@ class ESP32Driver:
                     time.sleep(2) # Wait for boot
                     self.is_connected = True
                     logger.info("ESP Reconnected successfully")
-                    print(f"{C_GREEN}[+] ESP32 Reconnected!{C_RESET}")
+                    print(f"{C_GREEN}[+] ESP Reconnected!{C_RESET}")
                 except Exception:
                     time.sleep(2) # Wait before retry
         
@@ -91,14 +91,14 @@ class ESP32Driver:
                     print(f"\n{C_GREEN}[!] CAPTURED DATA: {self.captured_password}{C_RESET}")
             
             elif "[STATUS]" in line:
-                print(f"{C_CYAN}[ESP Status]: {line}{C_RESET}")
+                print(f"\n{C_CYAN}[ESP Status]: {line}{C_RESET}")
             elif "[EVENT]" in line:
-                print(f"{C_YELLOW}[ESP Event]: {line}{C_RESET}")
+                print(f"\n{C_YELLOW}[ESP Event]: {line}{C_RESET}")
             elif "[ERROR]" in line:
                 logger.warning(f"ESP32 Error: {line}")
-                print(f"{C_RED}[ESP Error]: {line}{C_RESET}")
+                print(f"\n{C_RED}[ESP Error]: {line}{C_RESET}")
             elif "[SUCCESS]" in line:
-                print(f"{C_GREEN}[ESP]: {line}{C_RESET}")
+                print(f"\n{C_GREEN}[ESP]: {line}{C_RESET}")
         except Exception as e:
             logger.debug(f"Error processing serial line: {e}")
 
