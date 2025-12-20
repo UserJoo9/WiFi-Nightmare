@@ -58,17 +58,20 @@ class DatabaseHandler:
             return
             
         bssid_key = bssid.lower()
-        if bssid_key in self.known_networks:
-            if not isinstance(self.known_networks[bssid_key], dict):
-                current_ssid = self.known_networks[bssid_key]
-                self.known_networks[bssid_key] = {"SSID": current_ssid}
-            
-            self.known_networks[bssid_key]['Handshake'] = captured
-            self.known_networks[bssid_key]['HSTime'] = time_str
-            if filename:
-                self.known_networks[bssid_key]['HSFile'] = filename
-            
-            self._write_to_file()
+        if bssid_key not in self.known_networks:
+             # Upsert: Create new record if missing
+             self.known_networks[bssid_key] = {"SSID": "<HIDDEN>", "Handshake": False, "HSTime": "", "HSFile": ""}
+
+        if not isinstance(self.known_networks[bssid_key], dict):
+            current_ssid = self.known_networks[bssid_key]
+            self.known_networks[bssid_key] = {"SSID": current_ssid}
+        
+        self.known_networks[bssid_key]['Handshake'] = captured
+        self.known_networks[bssid_key]['HSTime'] = time_str
+        if filename:
+            self.known_networks[bssid_key]['HSFile'] = filename
+        
+        self._write_to_file()
 
     def _write_to_file(self):
         temp_file = DB_FILE + ".tmp"
