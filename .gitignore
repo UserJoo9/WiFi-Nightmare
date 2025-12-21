@@ -4,3 +4,5 @@ logs
 .pio
 handshakes
 logs
+wifi_db.json
+vendonrs_cache.json
