@@ -51,6 +51,7 @@ LOG_FILE = os.path.join(SCRIPT_DIR, config['output']['log_file'])
 
 CHANNEL_HOP_INTERVAL = config['scanning']['channel_hop_interval']
 DEAUTH_PACKETS = config['attacks']['deauth_packets']
+BAUDRATE = config['esp32']['baudrate']
 
 # Create dirs
 if not os.path.exists(HANDSHAKES_DIR):
