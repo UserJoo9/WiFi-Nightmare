@@ -11,21 +11,19 @@ from scapy.all import sniff
 from config import *
 import utils
 import ui
-import cracker 
 from database import DatabaseHandler
-from scanner import NetworkScanner
-from attacker import NetworkAttacker
-from client_recon import ClientMonitor
+from scanner import NetworkScanner, ClientMonitor
 from logger import logger, setup_logger
 
-# Import ESP32 & Evil Twin Modules
+# Import ESP32 & Attack Modules
 try:
     from esp_driver import ESP32Driver
-    from eviltwin import EvilTwinAttack
+    from attacks import EvilTwinAttack, NetworkAttacker
 except ImportError:
     # Disable features if modules missing
     ESP32Driver = None
     EvilTwinAttack = None
+    NetworkAttacker = None
 
 class WifiGTR:
     def __init__(self, interface, serial_port=None):
@@ -126,7 +124,9 @@ class WifiGTR:
             self.esp_driver.close()    
             print(f"{C_GREEN}[+] ESP Stopped.{C_RESET}")
             
-        # utils.restore_managed_mode(self.interface) 
+        # Restore interface to managed mode and restart NetworkManager
+        utils.restore_managed_mode(self.interface)
+        
         print(f"{C_YELLOW}[*] Exiting.{C_RESET}")
 
     def scan_workflow(self):
@@ -149,34 +149,40 @@ class WifiGTR:
         while True:
             ui.print_target_menu(ssid_name, bssid, channel, client_count)
             
-            # Show Evil Twin option if ESP32 connected
             if self.esp_driver and self.esp_driver.is_connected:
-                print(f"[{C_RED}6{C_RESET}] 😈 Evil Twin Attack (ESP Ready)")
+                print(f"{C_WHITE}[6] 😈 Evil Twin Attack (ESP Ready){C_RESET}")
             else:
-                print(f"[{C_GREY}6{C_RESET}] {C_GREY}😈 Evil Twin Attack (Unavailable - No ESP){C_RESET}")
+                print(f"{C_GREY}[6] 😈 Evil Twin Attack (Unavailable - No ESP){C_RESET}")
             
-            print("-" * 25)
+            print(f"{C_CYAN}-{'-'*24}{C_RESET}")
 
-            op = input(f"{C_YELLOW}[?]{C_RESET} Select Action: ").strip()
+            action = input(f"{C_YELLOW}[?]{C_RESET} Select Action: ").strip()
 
-            if op == '1': # Handshake
+            if action == '1': # Handshake
                 self.run_attack((bssid, channel), mode="handshake")
-            elif op == '2': # Reveal
+            elif action == '2': # Reveal
                 self.run_attack((bssid, channel), mode="reveal")
-            elif op == '3': # Deauth
+            elif action == '3': # Deauth
                 self.run_attack((bssid, channel), mode="deauth_only")
-            elif op == '4': # Passive
+            elif action == '4': # Passive
                 self.run_attack((bssid, channel), mode="passive")
-            elif op == '5': # PMKID Attack
-                self.run_attack((bssid, channel), mode="pmkid")
-            elif op == '6': # Evil Twin Logic
+            elif action == '5': # Gen Hash
+                # Generate hc22000
+                info = self.db.get_info(bssid)
+                if info and info.get('HSFile') and os.path.exists(info['HSFile']):
+                     utils.generate_hc22000(info['HSFile'])
+                     input("Press Enter to return to menu...")
+                else:
+                    print(f"{C_RED}[!] No handshake file found for this target.{C_RESET}")
+                    if info and info.get('HSFile'):
+                         print(f"    Missing file: {info['HSFile']}")
+                    print(f"{C_YELLOW}[*] Capture a handshake first (Option 1).{C_RESET}")
+                    time.sleep(2)
+            elif action == '6': # Evil Twin Logic
                 if self.esp_driver and self.esp_driver.is_connected:
                     self.run_eviltwin_workflow(bssid, channel, ssid_name)
                 else:
-                    print(f"{C_RED}[!] ESP is not connected. Please restart tool with serial port.{C_RESET}")
                     time.sleep(1)
-            elif op == '0':
-                break
             else:
                 print(f"\n{C_RED}[!] Invalid option.{C_RESET}")
                 time.sleep(1)
@@ -462,7 +468,13 @@ class WifiGTR:
             # Display Status
             dual_msg = f" {C_RED}+ ESP{C_RESET}" if esp_active else ""
             alert_msg = ""
-            if attacker.handshake_captured: 
+            
+            # Show extended capture status
+            if hasattr(attacker, 'extended_capture_start'):
+                elapsed = int(time.time() - attacker.extended_capture_start)
+                remaining = max(0, 10 - elapsed)
+                alert_msg = f" {C_CYAN}[Collecting context frames: {remaining}s]{C_RESET}"
+            elif attacker.handshake_captured: 
                 alert_msg = f" {C_GREEN}[HANDSHAKE!]{C_RESET}"
             elif attacker.pmkid_captured: 
                 alert_msg = f" {C_GREEN}[PMKID!]{C_RESET}"
@@ -557,7 +569,7 @@ class WifiGTR:
                     input("Enter...")
                     return
                 pwd = input(f"[?] Password for {data['SSID']}: ").strip()
-                if cracker.verify_password(pcap, bssid, data['SSID'], pwd):
+                if utils.verify_password(pcap, bssid, data['SSID'], pwd):
                     print(f"\n{C_GREEN}[SUCCESS] Correct Password!{C_RESET}")
                 else:
                     print(f"\n{C_RED}[FAILURE] Incorrect.{C_RESET}")
