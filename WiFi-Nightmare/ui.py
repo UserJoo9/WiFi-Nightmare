@@ -31,13 +31,14 @@ def print_target_menu(ssid, bssid, channel, client_count):
     print(f"Channel : {C_YELLOW}{channel}{C_RESET}")
     print(f"Clients : {C_YELLOW}{client_count}{C_RESET}")
     print("-----------------------")
-    print(f"[{C_GREEN}1{C_RESET}] 🤝 Capture Handshake")
-    print(f"[{C_GREEN}2{C_RESET}] 👁️  Reveal Hidden SSID")
-    print(f"[{C_GREEN}3{C_RESET}] 🚫 Deauth Attack (Disconnect)")
-    print(f"[{C_GREEN}4{C_RESET}] 👂 Passive Monitor (Stealth)")
-    print(f"[{C_YELLOW}0{C_RESET}] Back to Scan")
-    print("-----------------------")
-
+    print(f"{C_WHITE}[1] 🤝 Capture Handshake (WPA/WPA2){C_RESET}")
+    print(f"{C_WHITE}[2] 👁️  Reveal Hidden SSID{C_RESET}")
+    print(f"{C_WHITE}[3] 🚫 Deauth Attack (Disconnect){C_RESET}")
+    print(f"{C_WHITE}[4] 👂 Passive Monitor (Stealth){C_RESET}")
+    print(f"{C_WHITE}[5] 🔓 Generate Hashcat File (hc22000){C_RESET}")
+    print(f"{C_WHITE}[0] Back to Scan{C_RESET}")
+    print(f"{C_CYAN}-{'-'*22}{C_RESET}")
+    
 def print_database_menu():
     clear_screen()
     print(f"{C_CYAN}--- DATABASE & CRACKING ---{C_RESET}")
