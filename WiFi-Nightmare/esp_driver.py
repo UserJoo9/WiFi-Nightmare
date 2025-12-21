@@ -2,11 +2,11 @@
 import serial
 import time
 import threading
-from config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_RESET
+from config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_RESET, BAUDRATE
 from logger import logger
 
 class ESP32Driver:
-    def __init__(self, port, baudrate=115200):
+    def __init__(self, port, baudrate=BAUDRATE):
         self.port = port
         self.baudrate = baudrate
         self.ser = None
@@ -29,8 +29,8 @@ class ESP32Driver:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
             time.sleep(2) # Wait for board reset
             self.is_connected = True
-            logger.info(f"ESP32 Connected on {self.port}")
-            print(f"{C_GREEN}[+] ESP32 Connected on {self.port}{C_RESET}")
+            logger.info(f"ESP Connected on {self.port}")
+            print(f"{C_GREEN}[+] ESP Connected on {self.port}{C_RESET}")
             
             # Start listener thread
             self.stop_reading = False
@@ -58,7 +58,7 @@ class ESP32Driver:
                 except (OSError, serial.SerialException) as e:
                     logger.warning(f"ESP Disconnected: {e}")
                     self.is_connected = False
-                    print(f"\n{C_RED}[!] ESP32 Disconnected! Attempting to reconnect...{C_RESET}")
+                    print(f"\n{C_RED}[!] ESP Disconnected! Attempting to reconnect...{C_RESET}")
                     if self.ser:
                         try: self.ser.close()
                         except: pass
@@ -95,7 +95,7 @@ class ESP32Driver:
             elif "[EVENT]" in line:
                 print(f"\n{C_YELLOW}[ESP Event]: {line}{C_RESET}")
             elif "[ERROR]" in line:
-                logger.warning(f"ESP32 Error: {line}")
+                logger.warning(f"ESP Error: {line}")
                 print(f"\n{C_RED}[ESP Error]: {line}{C_RESET}")
             elif "[SUCCESS]" in line:
                 print(f"\n{C_GREEN}[ESP]: {line}{C_RESET}")
