@@ -1,5 +1,5 @@
 # WiFi-Nightmare
-**v2.0.1**
+**v2.0.2**
 
 WiFi-Nightmare is an advanced WiFi security auditing and penetration testing tool. It combines a powerful Python-based command-line interface (CLI) for Linux with custom firmware for ESP32 and ESP8266 devices to perform sophisticated attacks, including Evil Twin, Deauthentication, and Handshake/PMKID capturing.
 
