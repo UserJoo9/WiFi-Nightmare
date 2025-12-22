@@ -8,9 +8,11 @@ WiFi-Nightmare is an advanced WiFi security auditing and penetration testing too
 - **Network Scanning**: Discover available WiFi networks and clients.
 - **Deauthentication Attacks**: Disconnect clients from target networks.
 - **Handshake & PMKID Capture**: Capture WPA/WPA2 handshakes and PMKIDs for cracking.
+- **Hashcat File Generation**: Automatically convert captured handshakes to `.hc22000` format for Hashcat Mode 22000.
 - **Evil Twin Attack**: Create a fake access point to capture credentials (requires ESP32/ESP8266).
 - **Database Management**: Store and manage captured network information.
 - **Hybrid Mode**: Works as a standalone tool using a WiFi adapter or pairs with an ESP32/ESP8266 for enhanced capabilities.
+
 
 ## Project Structure
 
@@ -66,10 +68,11 @@ The Python application runs on Linux and acts as the control center. It requires
 - **Dependencies**:
     - `scapy`
     - `aircrack-ng` (for system tools like `iwconfig`, `airmon-ng`)
+    - `hcxtools` (for converting handshakes to hc22000)
 
     ```bash
     sudo apt-get update
-    sudo apt-get install aircrack-ng python3-pip
+    sudo apt-get install aircrack-ng hcxtools python3-pip
     sudo pip3 install scapy
     ```
 
@@ -107,7 +110,8 @@ sudo python3 main.py wlan0 /dev/ttyUSB0
 - **2. Client Monitor**: Monitor clients connected to a specific network.
 - **3. Mass Attack**: Deauth attack on multiple targets.
 - **4. Database**: View captured handshakes and networks.
-- **5. Evil Twin**: (In Target Menu) Start the Evil Twin attack using the ESP32.
+- **5. Generate Hashcat File**: (In Target Menu) Convert captured handshake to `.hc22000`.
+- **6. Evil Twin**: (In Target Menu) Start the Evil Twin attack using the ESP32.
 
 ---
 
