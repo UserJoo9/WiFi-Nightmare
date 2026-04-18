@@ -373,6 +373,11 @@ class WifiGTR:
         current_ssid = self.scanner.networks[bssid]['SSID']
         if current_ssid == "<HIDDEN>": current_ssid = "Unknown"
         
+        # Check if NetworkAttacker is available
+        if NetworkAttacker is None:
+            print(f"{C_RED}[!] Error: NetworkAttacker module not available. Check if attacks.py is properly installed.{C_RESET}")
+            return
+        
         # Prepare Interface
         utils.run_command(["ip", "link", "set", self.interface, "up"])
         utils.run_command(["iwconfig", self.interface, "channel", str(channel)])
