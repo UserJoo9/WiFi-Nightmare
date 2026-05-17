@@ -27,7 +27,7 @@ def check_root():
 
 def check_interface_exists(interface):
     # Check potential names (original or with mon suffix)
-    possible_names = [interface, interface + "mon", "wlan0mon", "mon0"]
+    possible_names = [interface, interface + "mon", "wlan0mon", "mon0", "wlan0"]
     for name in possible_names:
         if os.path.exists(f"/sys/class/net/{name}"):
             return name
