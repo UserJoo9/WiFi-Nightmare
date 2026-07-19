@@ -1,27 +1,29 @@
 # WiFi-Nightmare - Python Dependencies
 # WiFi Security Auditing Tool
-# Python 3.8+ required
+# Python 3.9+ required (scapy 2.7.0 dropped 3.7/3.8)
 
 # Core packet manipulation and network analysis
-scapy>=2.5.0
+scapy==2.7.0
 
 # Serial communication with ESP32/NodeMCU
-pyserial>=3.5
+pyserial==3.5
 
 # Configuration management
-PyYAML>=6.0
+PyYAML==6.0.3
 
-# Note: System dependencies (install via package manager):
-# - aircrack-ng (for handshake cracking)
-# - wireless-tools (iwconfig, iwlist)
-# - iw (modern wireless configuration)
-# - python3-dev (for some scapy dependencies)
+# System dependencies (install via package manager):
+# - aircrack-ng (for handshake cracking/verification)
+# - hcxtools (hcxpcapngtool for hc22000 generation)
+# - iw (wireless interface configuration)
+# - reaver (for WPS Pixie Dust attack)
+# - pixiewps (for offline WPS PIN recovery)
+# - wash (WPS scanner, part of reaver suite)
 #
 # Debian/Ubuntu:
-#   sudo apt-get install aircrack-ng wireless-tools iw python3-dev
+#   sudo apt-get install aircrack-ng hcxtools iw reaver pixiewps
 #
 # Arch Linux:
-#   sudo pacman -S aircrack-ng wireless_tools iw
+#   sudo pacman -S aircrack-ng hcxtools iw reaver pixiewps
 #
 # Fedora/RHEL:
-#   sudo dnf install aircrack-ng wireless-tools iw python3-devel
+#   sudo dnf install aircrack-ng hcxtools iw reaver pixiewps

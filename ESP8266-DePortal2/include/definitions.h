@@ -6,6 +6,7 @@
 #define LED 2  // Built-in LED on NodeMCU
 #define SERIAL_DEBUG
 #define CHANNEL_MAX 13
+#define MAX_HTML_SIZE 4096  // Max captive portal HTML bytes (keep in sync with Python ESP_HTML_LIMIT)
 #define NUM_FRAMES_PER_DEAUTH 16
 #define DEAUTH_BLINK_TIMES 2
 #define DEAUTH_BLINK_DURATION 20

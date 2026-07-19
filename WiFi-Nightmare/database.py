@@ -23,11 +23,34 @@ class DatabaseHandler:
                     # Shared lock for reading (Unix only)
                     if fcntl:
                         fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-                    
-                    self.known_networks = json.load(f)
-                    
+
+                    raw_data = json.load(f)
+
                     if fcntl:
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+                # Normalize legacy format (string values) to dict format
+                self.known_networks = {}
+                for bssid, value in raw_data.items():
+                    if isinstance(value, dict):
+                        entry = value
+                        entry.setdefault('SSID', '')
+                        entry.setdefault('Handshake', False)
+                        entry.setdefault('HSTime', '')
+                        entry.setdefault('HSFile', '')
+                        entry.setdefault('WPS_PIN', '')
+                        entry.setdefault('WPS_PSK', '')
+                        self.known_networks[bssid] = entry
+                    else:
+                        # Legacy: value is just the SSID string
+                        self.known_networks[bssid] = {
+                            "SSID": str(value),
+                            "Handshake": False,
+                            "HSTime": "",
+                            "HSFile": "",
+                            "WPS_PIN": "",
+                            "WPS_PSK": ""
+                        }
             except Exception as e:
                 logger.error(f"Failed to load database: {e}")
                 self.known_networks = {}
@@ -47,9 +70,9 @@ class DatabaseHandler:
             if isinstance(self.known_networks[bssid_key], dict):
                 self.known_networks[bssid_key]['SSID'] = ssid
             else:
-                self.known_networks[bssid_key] = {"SSID": ssid, "Handshake": False, "HSTime": "", "HSFile": ""}
+                self.known_networks[bssid_key] = {"SSID": ssid, "Handshake": False, "HSTime": "", "HSFile": "", "WPS_PIN": "", "WPS_PSK": ""}
         else:
-            self.known_networks[bssid_key] = {"SSID": ssid, "Handshake": False, "HSTime": "", "HSFile": ""}
+            self.known_networks[bssid_key] = {"SSID": ssid, "Handshake": False, "HSTime": "", "HSFile": "", "WPS_PIN": "", "WPS_PSK": ""}
             
         self._write_to_file()
 
@@ -60,7 +83,7 @@ class DatabaseHandler:
         bssid_key = bssid.lower()
         if bssid_key not in self.known_networks:
              # Upsert: Create new record if missing
-             self.known_networks[bssid_key] = {"SSID": "<HIDDEN>", "Handshake": False, "HSTime": "", "HSFile": ""}
+             self.known_networks[bssid_key] = {"SSID": "<HIDDEN>", "Handshake": False, "HSTime": "", "HSFile": "", "WPS_PIN": "", "WPS_PSK": ""}
 
         if not isinstance(self.known_networks[bssid_key], dict):
             current_ssid = self.known_networks[bssid_key]
@@ -97,6 +120,19 @@ class DatabaseHandler:
                 except OSError:
                     pass
             
+    def update_wps_info(self, bssid, pin, psk):
+        if not self._validate_bssid(bssid):
+            return
+        bssid_key = bssid.lower()
+        if bssid_key not in self.known_networks:
+            self.known_networks[bssid_key] = {"SSID": "<HIDDEN>", "Handshake": False, "HSTime": "", "HSFile": "", "WPS_PIN": "", "WPS_PSK": ""}
+        if not isinstance(self.known_networks[bssid_key], dict):
+            current_ssid = self.known_networks[bssid_key]
+            self.known_networks[bssid_key] = {"SSID": current_ssid, "Handshake": False, "HSTime": "", "HSFile": "", "WPS_PIN": "", "WPS_PSK": ""}
+        self.known_networks[bssid_key]['WPS_PIN'] = pin
+        self.known_networks[bssid_key]['WPS_PSK'] = psk
+        self._write_to_file()
+
     def get_info(self, bssid):
         return self.known_networks.get(bssid.lower(), None)
 

@@ -4,8 +4,12 @@ import sys
 import subprocess
 import time
 import shutil
+import signal
 from datetime import datetime
-from config import *
+from config import (
+    C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET,
+    SCRIPT_DIR
+)
 from logger import logger
 
 # Try to import vendor database
@@ -52,6 +56,18 @@ def run_command(cmd_list, check=False):
         logger.error(f"Error running command {cmd_list}: {e}")
         return False
 
+def _get_iw_mode(interface):
+    """Get current interface mode using 'iw dev info'"""
+    try:
+        output = subprocess.getoutput(f"iw dev {interface} info")
+        if "type monitor" in output:
+            return "monitor"
+        elif "type managed" in output:
+            return "managed"
+    except Exception:
+        pass
+    return None
+
 def enable_monitor_mode(interface):
     print(f"\n{C_YELLOW}[*] Preparing Interface...{C_RESET}")
     logger.info(f"Preparing interface {interface} for monitor mode")
@@ -80,15 +96,13 @@ def enable_monitor_mode(interface):
     for iface in check_list:
         if os.path.exists(f"/sys/class/net/{iface}"):
             try:
-                # Read current mode
-                iw_out = subprocess.getoutput(f"iwconfig {iface}")
-                if "Mode:Monitor" in iw_out:
+                mode = _get_iw_mode(iface)
+                if mode == "monitor":
                     logger.info(f"Interface '{iface}' is already in Monitor Mode.")
                     print(f"{C_GREEN}[+] Interface '{iface}' is ALREADY in Monitor Mode.{C_RESET}")
                     
-                    # Ensure it is up and on a default channel
                     run_command(["ip", "link", "set", iface, "up"])
-                    run_command(["iwconfig", iface, "channel", "1"])
+                    run_command(["iw", "dev", iface, "set", "channel", "1"])
                     return iface
             except Exception as e:
                 logger.debug(f"Error checking interface {iface}: {e}")
@@ -100,12 +114,11 @@ def enable_monitor_mode(interface):
     try:
         run_command(["ip", "link", "set", interface, "down"])
         time.sleep(0.3)
-        run_command(["iwconfig", interface, "mode", "monitor"])
+        run_command(["iw", "dev", interface, "set", "type", "monitor"])
         time.sleep(0.3)
         run_command(["ip", "link", "set", interface, "up"])
         
-        # Verify
-        if "Mode:Monitor" in subprocess.getoutput(f"iwconfig {interface}"):
+        if _get_iw_mode(interface) == "monitor":
             print(f"{C_GREEN}[+] Monitor Mode Enabled on: {interface}{C_RESET}")
             return interface
     except Exception as e:
@@ -131,7 +144,7 @@ def restore_managed_mode(interface):
     try:
         # 1. Stop airmon-ng if it was used
         if interface.endswith("mon"):
-            original_interface = interface[:-3]  # Remove 'mon' suffix
+            original_interface = interface[:-3]
             print(f"{C_CYAN}[*] Stopping airmon-ng on {interface}...{C_RESET}")
             run_command(["airmon-ng", "stop", interface])
             interface = original_interface
@@ -142,7 +155,7 @@ def restore_managed_mode(interface):
         time.sleep(0.5)
         
         # 3. Set to managed mode
-        run_command(["iwconfig", interface, "mode", "managed"])
+        run_command(["iw", "dev", interface, "set", "type", "managed"])
         time.sleep(0.5)
         
         # 4. Bring interface up
@@ -154,9 +167,8 @@ def restore_managed_mode(interface):
         run_command(["service", "NetworkManager", "start"])
         time.sleep(1)
         
-        # Verify restoration
-        iw_out = subprocess.getoutput(f"iwconfig {interface}")
-        if "Mode:Managed" in iw_out:
+        mode = _get_iw_mode(interface)
+        if mode == "managed":
             print(f"{C_GREEN}[+] Interface {interface} restored to Managed Mode{C_RESET}")
             print(f"{C_GREEN}[+] NetworkManager restarted{C_RESET}")
             logger.info(f"Interface {interface} successfully restored to managed mode")
@@ -169,6 +181,35 @@ def restore_managed_mode(interface):
         logger.error(f"Error restoring interface: {e}")
         print(f"{C_YELLOW}[*] You may need to manually restart NetworkManager:{C_RESET}")
         print(f"    sudo service NetworkManager start")
+
+
+class SignalManager:
+    """Context manager for safe SIGINT handling during attacks."""
+
+    def __init__(self):
+        self._original_handler = None
+        self._stop_event = None
+
+    def __enter__(self):
+        self._original_handler = signal.getsignal(signal.SIGINT)
+        self._stop_event = __import__('threading').Event()
+        signal.signal(signal.SIGINT, self._handler)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        signal.signal(signal.SIGINT, self._original_handler)
+        return False
+
+    def _handler(self, sig, frame):
+        self._stop_event.set()
+
+    @property
+    def stopped(self):
+        return self._stop_event.is_set() if self._stop_event else False
+
+    def stop(self):
+        if self._stop_event:
+            self._stop_event.set()
 
 
 def verify_password(pcap_file, bssid, ssid, password):

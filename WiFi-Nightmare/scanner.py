@@ -2,8 +2,8 @@
 import time
 import subprocess
 import threading
-from scapy.all import *
-from config import *
+from scapy.all import sniff, Dot11, Dot11Beacon, Dot11Elt, RadioTap
+from config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET
 from utils import get_vendor
 from logger import logger
 
@@ -63,7 +63,19 @@ class NetworkScanner:
                     has_handshake = False
                     
                     vendor_name = get_vendor(bssid)
-                    
+
+                    has_wps = False
+                    try:
+                        wps_elt = pkt.getlayer(Dot11Elt)
+                        while wps_elt:
+                            if wps_elt.ID == 221 and len(wps_elt.info) >= 4:
+                                if wps_elt.info[:3] == b'\x00\x50\xf2' and wps_elt.info[3] == 4:
+                                    has_wps = True
+                                    break
+                            wps_elt = wps_elt.payload
+                    except Exception:
+                        pass
+
                     # Database check
                     db_info = self.db.get_info(bssid)
                     if db_info:
@@ -91,6 +103,7 @@ class NetworkScanner:
                                 "Known": is_known,
                                 "RSSI": rssi,
                                 "Handshake": has_handshake,
+                                "WPS": has_wps,
                                 "Vendor": vendor_name,
                                 "Clients": set()
                             }
@@ -170,7 +183,10 @@ class ClientMonitor:
 
     def start(self):
         self.stop_monitoring = False
-        
+
+        # Reset scanner stop flag so the channel hopper doesn't immediately exit
+        self.scanner.stop_sniffing = False
+
         if not any(t.name == "ChannelHopper" for t in threading.enumerate()):
             t = threading.Thread(target=self.scanner.channel_hopper, name="ChannelHopper", daemon=True)
             t.start()

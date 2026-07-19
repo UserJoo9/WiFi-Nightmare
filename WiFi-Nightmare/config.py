@@ -21,6 +21,7 @@ def load_config():
     defaults = {
         'scanning': {'channel_hop_interval': 0.5, 'timeout': 60},
         'attacks': {'deauth_packets': 50, 'handshake_timeout': 120, 'pmkid_timeout': 30},
+        'pixie_dust': {'timeout': 120, 'verbose': True},
         'database': {'path': "wifi_db.json", 'auto_backup': True, 'backup_count': 5},
         'esp32': {'baudrate': 115200, 'timeout': 10},
         'output': {'cracked_passwords': "cracked.txt", 'handshakes_dir': "handshakes", 'log_file': "logs/wifinightmare.log"}
@@ -52,6 +53,8 @@ LOG_FILE = os.path.join(SCRIPT_DIR, config['output']['log_file'])
 CHANNEL_HOP_INTERVAL = config['scanning']['channel_hop_interval']
 DEAUTH_PACKETS = config['attacks']['deauth_packets']
 BAUDRATE = config['esp32']['baudrate']
+PIXIE_DUST_TIMEOUT = config['pixie_dust']['timeout']
+ESP_HTML_LIMIT = 4096  # Max bytes for ESP captive portal HTML (also defined in firmware)
 
 # Create dirs
 if not os.path.exists(HANDSHAKES_DIR):
@@ -72,7 +75,7 @@ C_RESET = "\033[0m"
 
 # --- Project Identity ---
 APP_NAME = "Wi-Fi Nightmare"
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 AUTHOR = "Youssef Alkhodary"
 
 # --- ASCII Art Banner ---

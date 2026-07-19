@@ -1,7 +1,10 @@
 
 # ui.py
 import os
-from config import *
+from config import (
+    C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET,
+    BANNER, VERSION, AUTHOR
+)
 
 def clear_screen():
     print("\033[H\033[J", end="")
@@ -36,8 +39,7 @@ def print_target_menu(ssid, bssid, channel, client_count):
     print(f"{C_WHITE}[3] 🚫 Deauth Attack (Disconnect){C_RESET}")
     print(f"{C_WHITE}[4] 👂 Passive Monitor (Stealth){C_RESET}")
     print(f"{C_WHITE}[5] 🔓 Generate Hashcat File (hc22000){C_RESET}")
-    print(f"{C_WHITE}[0] Back to Scan{C_RESET}")
-    print(f"{C_CYAN}-{'-'*22}{C_RESET}")
+    print(f"{C_WHITE}[8] ⚡ Pixie Dust Attack (WPS){C_RESET}")
     
 def print_database_menu():
     clear_screen()
@@ -48,10 +50,25 @@ def print_database_menu():
     print("---------------------------")
 
 # ... (باقي الدوال: print_scan_table, print_attack_summary, show_saved_db تبقى كما هي في النسخة السابقة) ...
+def print_portal_menu(templates, current_status, has_esp=False):
+    clear_screen()
+    print(f"{C_CYAN}--- EVIL TWIN PORTAL CUSTOMIZATION ---{C_RESET}")
+    if has_esp:
+        print(f"{C_YELLOW}Mode: ESP + Software Evil Twin{C_RESET}")
+    else:
+        print(f"{C_YELLOW}Mode: Software Evil Twin (no ESP){C_RESET}")
+    print(f"Current: {current_status}")
+    print("-" * 40)
+    for i, name in enumerate(templates, 1):
+        print(f"[{C_GREEN}{i}{C_RESET}] {name}")
+    print(f"[{C_GREEN}C{C_RESET}] Load from file (custom HTML)")
+    print(f"[{C_GREEN}R{C_RESET}] Reset to default portal")
+    print(f"[{C_RED}0{C_RESET}] Back")
+    print("-" * 40)
 def print_scan_table(interface, networks, lock):
     clear_screen()
     print(f"[*] Interface: {C_GREEN}{interface}{C_RESET} | Scanning... ({C_RED}Ctrl+C to Stop{C_RESET})")
-    header = f"{'ID':<4} {'BSSID':<18} {'PWR':<5} {'HS':<4} {'CH':<4} {'ENC':<25} {'VENDOR':<16} {'CL':<4} {'SSID'}"
+    header = f"{'ID':<4} {'BSSID':<18} {'PWR':<5} {'HS':<4} {'WPS':<5} {'CH':<4} {'ENC':<25} {'VENDOR':<16} {'CL':<4} {'SSID'}"
     print("-" * len(header))
     print(header)
     print("-" * len(header))
@@ -76,7 +93,8 @@ def print_scan_table(interface, networks, lock):
             if info['Known']: ssid_display = f"{C_GREEN}{ssid_raw}{C_RESET}"
             elif info['Hidden']: ssid_display = f"{C_GREY}<HIDDEN>{C_RESET}"
             else: ssid_display = f"{C_WHITE}{ssid_raw}{C_RESET}"
-            print(f"{i:<4} {bssid:<18} {pwr_color}{rssi:<5}{C_RESET} {hs_mark:<13} {info['Channel']:<4} {enc:<25} {vendor:<16} {cl_str} {ssid_display}")
+            wps_mark = f"{C_GREEN}Yes{C_RESET}" if info.get('WPS') else f"{C_GREY}No {C_RESET}"
+            print(f"{i:<4} {bssid:<18} {pwr_color}{rssi:<5}{C_RESET} {hs_mark:<13} {wps_mark:<14} {info['Channel']:<4} {enc:<25} {vendor:<16} {cl_str} {ssid_display}")
     return display_list
 
 def print_attack_summary(result):

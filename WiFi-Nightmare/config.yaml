@@ -9,6 +9,10 @@ attacks:
   handshake_timeout: 120
   pmkid_timeout: 30
 
+pixie_dust:
+  timeout: 120
+  verbose: true
+
 database:
   path: "./wifi_db.json"
   auto_backup: true

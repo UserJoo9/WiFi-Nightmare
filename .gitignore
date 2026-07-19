@@ -1,8 +1,10 @@
 __pycache__
-logs
 .vscode
 .pio
-handshakes
-logs
+build
+logs/
+handshakes/
 wifi_db.json
-vendonrs_cache.json
+vendors_cache.json
+*.pyc
+.env

@@ -1,8 +1,10 @@
 import os
 import json
 import time
+import threading
 import urllib.request
 import ssl
+from concurrent.futures import ThreadPoolExecutor
 from config import VENDOR_FILE, VENDOR_CACHE_FILE
 
 # ==========================================
@@ -246,15 +248,16 @@ def save_cache():
 
 # Rate limit: 1 request per second to avoid ban
 LAST_REQUEST_TIME = 0
+_rate_lock = threading.Lock()
 
 def get_online_vendor(mac_clean):
     global LAST_REQUEST_TIME
-    
-    current_time = time.time()
-    if current_time - LAST_REQUEST_TIME < 1.0:
-        time.sleep(1.0 - (current_time - LAST_REQUEST_TIME))
-    
-    LAST_REQUEST_TIME = time.time()
+
+    with _rate_lock:
+        current_time = time.time()
+        if current_time - LAST_REQUEST_TIME < 1.0:
+            time.sleep(1.0 - (current_time - LAST_REQUEST_TIME))
+        LAST_REQUEST_TIME = time.time()
 
     try:
         url = f"https://api.macvendors.com/{mac_clean}"
@@ -277,38 +280,56 @@ def get_online_vendor(mac_clean):
 # Initialize Cache
 load_cache()
 
+_pending_lookups = set()
+_lookup_lock = threading.Lock()
+_lookup_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="vendor_lookup")
+
+
+def _background_lookup(oui_clean, oui_colon, mac_clean):
+    """Background thread: try online API, then file DB."""
+    try:
+        online_res = get_online_vendor(mac_clean)
+        if online_res:
+            ONLINE_CACHE[oui_clean] = online_res
+            save_cache()
+            return
+
+        if not FILE_LOADED:
+            load_file_db()
+        file_res = FILE_DB.get(oui_clean)
+        if file_res:
+            ONLINE_CACHE[oui_clean] = file_res
+            save_cache()
+            return
+    finally:
+        with _lookup_lock:
+            _pending_lookups.discard(oui_clean)
+
+
 def lookup_vendor(mac):
-    if not mac or len(mac) < 8: return "Unknown"
-    
+    if not mac or len(mac) < 8:
+        return "Unknown"
+
     clean_mac = mac.replace(":", "").replace("-", "").upper()
-    if len(clean_mac) < 6: return "Unknown"
-    
+    if len(clean_mac) < 6:
+        return "Unknown"
+
     oui_clean = clean_mac[:6]
     oui_colon = mac.upper()[:8]
 
-    # 1. Online Cache (الأولوية للكاش)
+    # 1. Online cache (fast path)
     if oui_clean in ONLINE_CACHE:
         return ONLINE_CACHE[oui_clean]
 
-    # 2. Online API (البحث أونلاين)
-    online_res = get_online_vendor(clean_mac)
-    if online_res:
-        ONLINE_CACHE[oui_clean] = online_res
-        save_cache() 
-        return online_res
-
-    # 3. Internal DB (القائمة اليدوية)
+    # 2. Internal DB (fast path)
     if oui_colon in INTERNAL_DB:
         return INTERNAL_DB[oui_colon]
 
-    # 4. File DB (الملف النصي)
-    if not FILE_LOADED: load_file_db()
-    
-    file_res = FILE_DB.get(oui_clean, None)
-    if file_res:
-        ONLINE_CACHE[oui_clean] = file_res 
-        save_cache()
-        return file_res
+    # 3. Launch background lookup if not already pending (non-blocking)
+    with _lookup_lock:
+        if oui_clean not in _pending_lookups:
+            _pending_lookups.add(oui_clean)
+            _lookup_executor.submit(_background_lookup, oui_clean, oui_colon, clean_mac)
 
     return "Unknown"
 
