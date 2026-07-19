@@ -14,4 +14,3 @@ vendors_cache.json
 dist/
 .pybuild/
 .claude
-CLAUDE.md

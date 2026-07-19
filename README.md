@@ -197,8 +197,8 @@ python3 -c "import yaml; print('PyYAML OK')"
 
 **Expected output:**
 ```
-2.2.0
-OK: 2.2.0
+2.1.0
+OK: 2.1.0
 ... (directory listings) ...
 /usr/bin/aircrack-ng
 /usr/sbin/iw
