@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create runtime data directory for captured handshakes and logs
+        mkdir -p /var/lib/wifi-nightmare/handshakes
+        mkdir -p /var/lib/wifi-nightmare/logs
+
+        # Set secure permissions (requires root for operation anyway)
+        chown -R root:root /var/lib/wifi-nightmare 2>/dev/null || true
+        chmod 750 /var/lib/wifi-nightmare
+
+        # Copy default configuration to /etc/ if not already present
+        if [ ! -f /etc/wifi-nightmare/config.yaml ]; then
+            mkdir -p /etc/wifi-nightmare
+            PKG_CFG="/usr/lib/python3/dist-packages/wifi_nightmare/config.yaml"
+            if [ -f "$PKG_CFG" ]; then
+                cp "$PKG_CFG" /etc/wifi-nightmare/config.yaml
+                chmod 644 /etc/wifi-nightmare/config.yaml
+            fi
+        fi
+        ;;
+esac
+
+exit 0

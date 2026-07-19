@@ -4,7 +4,30 @@ All notable changes to WiFi-Nightmare will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [2.2.0] - 2026-07-19
+
+### Added
+- **Debian/APT packaging** — WiFi-Nightmare is now installable via `apt install wifi-nightmare`
+- **APT repository** — Hosted on GitHub Pages, one-liner setup: `curl -sSL https://youssefalkhodary.github.io/wifi-nightmare/install.sh | sudo bash`
+- **`wifi-nightmare` CLI command** — Console script entry point replaces `python3 main.py`
+- **`python3 -m wifi_nightmare`** — Alternative execution method
+- **`wifi-nightmare flash-esp`** — One-command ESP firmware flashing via esptool (no PlatformIO needed)
+- **`esp_firmware/`** — Pre-compiled ESP32/ESP8266 firmware binaries bundled with the package
+- **`debian/`** — Full Debian packaging directory with proper dependency declarations
+- **`install.sh`** — APT repository setup script for one-liner install
+- **`pyproject.toml`** — Python build configuration with setuptools
+- **GitHub Actions workflow** — Automatic .deb build and APT repo update on version tags
+
+### Changed
+- Python package renamed from `WiFi-Nightmare/` → `wifi_nightmare/` (valid Python module name)
+- All internal imports updated to use `from wifi_nightmare.xxx import ...` format
+- Runtime data paths moved to `~/.wifi-nightmare/` (dev) or `/var/lib/wifi-nightmare/` (installed)
+- Configuration loading: package defaults → `/etc/wifi-nightmare/config.yaml` override (installed mode)
+- `requirements.txt` replaced by `pyproject.toml` `[project.dependencies]`
+- `esptool>=4.0` added as a dependency for ESP firmware flashing
+
+### Fixed
+- `__init__.py` now correctly reports version `2.1.0` instead of stale `2.0.2`
 
 ### Added
 - **Software Evil Twin (VIF)** — Run Evil Twin without ESP hardware if adapter supports Virtual Interfaces

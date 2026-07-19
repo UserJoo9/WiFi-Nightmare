@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "wifi-nightmare"
+version = "2.1.0"
+description = "Advanced WiFi Security Auditing and Penetration Testing Framework"
+readme = "README.md"
+license = {text = "GPL-3.0-only"}
+authors = [
+    {name = "Youssef Alkhodary"}
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Natural Language :: English",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "scapy==2.7.0",
+    "pyserial==3.5",
+    "PyYAML==6.0.3",
+    "esptool>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/YoussefAlkhodary/WiFi-Nightmare"
+Repository = "https://github.com/YoussefAlkhodary/WiFi-Nightmare.git"
+
+[project.scripts]
+wifi-nightmare = "wifi_nightmare.main:entry_point"
+
+[tool.setuptools.packages.find]
+include = ["wifi_nightmare", "wifi_nightmare.*"]
+
+[tool.setuptools.package-data]
+wifi_nightmare = [
+    "config.yaml",
+    "mac-vendor.txt",
+    "vendors_cache.json",
+]

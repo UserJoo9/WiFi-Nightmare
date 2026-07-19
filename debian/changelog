@@ -1,0 +1,9 @@
+wifi-nightmare (2.1.0) unstable; urgency=medium
+
+  * Initial Debian packaging for APT-based install.
+  * Pre-compiled ESP firmware bundled in /usr/share/wifi-nightmare/.
+  * Runtime data stored in /var/lib/wifi-nightmare/.
+  * Configuration overrides in /etc/wifi-nightmare/config.yaml.
+  * System dependencies auto-resolved via apt (aircrack-ng, iw, hcxtools, etc.).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Sun, 19 Jul 2026 12:00:00 +0000

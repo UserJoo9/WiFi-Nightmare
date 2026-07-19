@@ -30,92 +30,409 @@ Advanced WiFi security auditing and penetration testing tool. Combines a Python 
 ## Project Structure
 
 ```
-WiFi-Nightmare/
-├── WiFi-Nightmare/              # Python CLI application
-│   ├── main.py                  # Main orchestrator & menus
-│   ├── scanner.py               # Network scanning & client monitor
-│   ├── attacks.py               # Compatibility shim (deauth/handshake/eviltwin)
-│   ├── deauth.py                # Deauth frame injection
-│   ├── handshake.py             # Handshake capture & SSID reveal
-│   ├── eviltwin.py              # Evil Twin attack via ESP
-│   ├── evil_twin_software.py    # Software Evil Twin (hostapd + dnsmasq + Python portal)
-│   ├── pixie_dust.py            # WPS Pixie Dust attack (reaver + pixiewps)
-│   ├── capture_native.py        # Native handshake capture (airodump-ng)
-│   ├── esp_driver.py            # Serial communication with ESP
-│   ├── portals.py               # 9 branded captive portal HTML templates
-│   ├── vif_check.py             # Virtual Interface support detection
-│   ├── database.py              # Network database (JSON with atomic writes)
-│   ├── vendors.py               # MAC vendor lookup (OUI DB → cache → HTTP)
-│   ├── utils.py                 # System utilities, iw wrapper, SignalManager
-│   ├── ui.py                    # CLI display & menus
-│   ├── config.py                # Configuration loader + constants
-│   ├── logger.py                # Logging with rotation
-│   ├── dep_check.py             # Runtime dependency checker
-│   ├── config.yaml              # Runtime configuration
-│   ├── requirements.txt         # Python dependencies (pinned)
-│   └── __init__.py              # Package marker
+WiFi-Nightmare/                     # Git root
+├── wifi_nightmare/                 # Python package
+│   ├── __init__.py                 # Package version & metadata
+│   ├── __main__.py                 # python -m wifi_nightmare support
+│   ├── main.py                     # Main orchestrator & menus
+│   ├── config.py                   # Configuration loader + path resolution
+│   ├── flash_esp.py                # ESP firmware flashing command
+│   ├── scanner.py                  # Network scanning & client monitor
+│   ├── attacks.py                  # Compatibility shim
+│   ├── deauth.py                   # Deauth frame injection
+│   ├── handshake.py                # Handshake capture & SSID reveal
+│   ├── eviltwin.py                 # Evil Twin attack via ESP
+│   ├── evil_twin_software.py       # Software Evil Twin (hostapd + dnsmasq + Python portal)
+│   ├── pixie_dust.py               # WPS Pixie Dust attack
+│   ├── capture_native.py           # Native handshake capture
+│   ├── esp_driver.py               # Serial communication with ESP
+│   ├── portals.py                  # 9 branded captive portal HTML templates
+│   ├── vif_check.py                # Virtual Interface support detection
+│   ├── database.py                 # Network database (JSON with atomic writes)
+│   ├── vendors.py                  # MAC vendor lookup (OUI DB → cache → HTTP)
+│   ├── utils.py                    # System utilities, iw wrapper, SignalManager
+│   ├── ui.py                       # CLI display & menus
+│   ├── dep_check.py                # Runtime dependency checker
+│   ├── config.yaml                 # Default runtime configuration
+│   └── mac-vendor.txt              # OUI vendor database
+├── esp_firmware/                   # Pre-compiled ESP firmware binaries
+│   ├── esp32/                      # ESP32 firmware (bootloader + partitions + app)
+│   └── esp8266/                    # ESP8266 firmware
+├── ESP32-DePortal2/                # ESP32 firmware source (PlatformIO)
+├── ESP8266-DePortal2/              # ESP8266 firmware source (PlatformIO)
+├── debian/                         # Debian packaging files
+│   ├── control                     # Package metadata & dependencies
+│   ├── rules                       # Build instructions
+│   ├── postinst                    # Post-installation script
+│   ├── install                     # File mapping
+│   ├── changelog                   # Debian changelog
+│   ├── copyright                   # License
+│   └── source/format               # Source package format
 ├── tests/
-│   └── test_core.py             # Unit tests
-├── ESP32-DePortal2/             # ESP32 firmware (PlatformIO)
-│   ├── include/                 # Header files (definitions.h, types.h, serial_handler.h)
-│   └── src/                     # Source files (serial_handler.cpp, state.cpp)
-├── ESP8266-DePortal2/           # ESP8266 firmware (PlatformIO)
-│   ├── include/                 # Header files (definitions.h, types.h, serial_handler.h)
-│   └── src/                     # Source files (serial_handler.cpp, state.cpp)
-├── CHANGELOG.md                 # Version history
-├── PROJECT_MAP.md               # Architecture documentation
-└── README.md                    # This file
+│   └── test_core.py                # Unit tests
+├── pyproject.toml                  # Python build configuration
+├── setup.py                        # Setuptools shim for Debian build
+├── install.sh                      # APT repo one-liner setup script
+├── CHANGELOG.md                    # Version history
+├── PROJECT_MAP.md                  # Architecture documentation
+└── README.md                       # This file
 ```
 
 ---
 
 ## Installation
 
-### Prerequisites
+### 🧭 Installation Tutorial
 
-- **OS**: Linux (Kali, Parrot, Ubuntu recommended)
-- **WiFi adapter** that supports Monitor Mode + Packet Injection
-- **Python 3.9+**
-- **System tools**: `aircrack-ng`, `hcxtools`, `iw`
-- **For Software Evil Twin**: `hostapd`, `dnsmasq` (optional — VIF-capable adapter required)
-- **For Pixie Dust**: `reaver`, `pixiewps` (optional)
+This guide walks you through installing WiFi-Nightmare on Ubuntu/Debian/Kali Linux — from zero to running your first scan. You'll learn two install methods, how to verify, how to flash ESP hardware, how to update, and how to uninstall.
 
-### Step 1: Install System Dependencies
+---
 
+### ✅ Step 0: Prerequisites
+
+Before you begin, make sure you have:
+
+| Requirement | Details |
+|------------|---------|
+| **Supported OS** | Ubuntu 20.04+, Debian 11+, Kali Linux 2023+, Parrot OS |
+| **WiFi Adapter** | Any adapter supporting **Monitor Mode** + **Packet Injection** |
+| **Internet Connection** | Needed for installation (wired/Ethernet recommended) |
+| **ESP Board** | (Optional) ESP32 or ESP8266 for hardware Evil Twin attacks |
+| **USB Cable** | (Optional) **Data-capable** USB cable for ESP flashing |
+| **Root Access** | `sudo` privileges on the machine |
+
+**Check your WiFi adapter:**
 ```bash
-# Debian / Ubuntu / Kali
-sudo apt-get update
-sudo apt-get install aircrack-ng hcxtools iw python3-pip hostapd dnsmasq reaver pixiewps
-
-# Arch Linux
-sudo pacman -S aircrack-ng hcxtools iw python-pip hostapd dnsmasq reaver pixiewps
-
-# Fedora / RHEL
-sudo dnf install aircrack-ng hcxtools iw python3-pip hostapd dnsmasq reaver pixiewps
+# List your wireless interfaces
+iw dev
+# If nothing shows, you may need an external adapter
 ```
 
-### Step 2: Install Python Dependencies
+**Compatible adapters (recommended):**
+
+| Chipset | Example | Monitor | Injection | Virtual AP |
+|---------|---------|:-------:|:---------:|:----------:|
+| RTL8812AU | Alfa AWUS036ACH | ✅ | ✅ | ✅ |
+| RTL8814AU | Alfa AWUS1900 | ✅ | ✅ | ✅ |
+| RTL8821AU | Comfast CF-912AC | ✅ | ✅ | ✅ |
+| AR9271 | TP-Link TL-WN722N v1 | ✅ | ✅ | ❌ |
+| RTL8187 | Alfa AWUS036H | ✅ | ✅ | ❌ |
+| RTL8188EU | TP-Link TL-WN725N | ✅ | ✅ | ❌ |
+
+> ⚠️ **Important:** Built-in laptop WiFi cards usually **don't support monitor mode**. You need an external USB adapter. If unsure, the Alfa AWUS036ACH (RTL8812AU) is the safest choice — it supports everything.
+
+---
+
+### 📦 Step 1: Choose an Install Method
+
+#### Method A: Quick Install (Recommended)
+
+One command — the simplest way:
 
 ```bash
-cd WiFi-Nightmare/WiFi-Nightmare
-pip3 install -r requirements.txt
+curl -sSL https://youssefalkhodary.github.io/wifi-nightmare/install.sh | sudo bash
 ```
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| scapy | 2.7.0 | Packet injection & sniffing |
-| pyserial | 3.5 | ESP serial communication |
-| PyYAML | 6.0.3 | Config file loading |
+**What this does:**
+1. Installs `curl` and `gnupg` if missing
+2. Downloads the GPG signing key → `/usr/share/keyrings/wifi-nightmare.gpg`
+3. Adds the APT repository → `/etc/apt/sources.list.d/wifi-nightmare.list`
+4. Runs `apt update` to refresh package lists
+5. Installs `wifi-nightmare` and all dependencies
 
-### Step 3: Flash ESP Firmware (Optional — for ESP Evil Twin)
+⏱ **Expected time:** ~30–60 seconds
 
-Only needed for ESP-based Evil Twin attacks.
+#### Method B: Manual APT Install
 
-1. Install [VS Code](https://code.visualstudio.com/) + [PlatformIO IDE extension](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide)
-2. Open `ESP32-DePortal2` or `ESP8266-DePortal2` folder in VS Code
-3. Connect your ESP board via USB
-4. Click the **Upload** arrow in PlatformIO status bar
-5. Wait for `SUCCESS` message
+Prefer doing things step by step? Follow these commands:
+
+```bash
+# 1. Install prerequisites
+sudo apt update
+sudo apt install -y curl gnupg
+
+# 2. Import the GPG signing key
+curl -fsSL https://youssefalkhodary.github.io/wifi-nightmare/KEY.gpg | \
+    sudo gpg --dearmor -o /usr/share/keyrings/wifi-nightmare.gpg
+
+# 3. Add the APT repository
+echo "deb [signed-by=/usr/share/keyrings/wifi-nightmare.gpg] \
+    https://youssefalkhodary.github.io/wifi-nightmare/apt stable main" | \
+    sudo tee /etc/apt/sources.list.d/wifi-nightmare.list
+
+# 4. Install the package
+sudo apt update
+sudo apt install wifi-nightmare
+```
+
+---
+
+### ✅ Step 2: Verify the Installation
+
+After installing, run these checks to make sure everything works:
+
+```bash
+# Check the version
+wifi-nightmare --version
+
+# View help
+wifi-nightmare --help
+
+# Verify Python module loads
+python3 -c "import wifi_nightmare; print('OK:', wifi_nightmare.__version__)"
+
+# Check runtime directories exist
+ls -la /usr/share/wifi-nightmare/   # Static data (firmware, vendor DB)
+ls -la /var/lib/wifi-nightmare/    # Runtime data (handshakes, logs, DB)
+ls -la /etc/wifi-nightmare/        # Configuration file
+
+# Check key system dependencies
+which aircrack-ng iw hcxpcapngtool && echo "System deps OK"
+
+# Check Python dependencies
+python3 -c "from scapy.all import *; print('scapy OK')"
+python3 -c "import serial; print('pyserial OK')"
+python3 -c "import yaml; print('PyYAML OK')"
+```
+
+**Expected output:**
+```
+2.2.0
+OK: 2.2.0
+... (directory listings) ...
+/usr/bin/aircrack-ng
+/usr/sbin/iw
+/usr/bin/hcxpcapngtool
+System deps OK
+scapy OK
+pyserial OK
+PyYAML OK
+```
+
+---
+
+### 🚀 Step 3: First Run
+
+Now let's start the tool and scan for networks.
+
+```bash
+# Run with your WiFi adapter (replace wlan0 with your interface)
+sudo wifi-nightmare wlan0
+```
+
+**If you have an ESP module:**
+```bash
+sudo wifi-nightmare wlan0 /dev/ttyUSB0
+```
+
+**What you should see — the Main Menu:**
+```
+╔══════════════════════════════════════════╗
+║         WiFi Nightmare  v2.1.0           ║
+║         Advanced WiFi Security Tool      ║
+╠══════════════════════════════════════════╣
+║                                          ║
+║  [1] Scan & Reconnaissance               ║
+║  [2] Client Monitor (Live View)          ║
+║  [3] Mass Attack (Auto-Pilot)            ║
+║  [4] Offline Database & Cracking         ║
+║  [5] Evil Twin Portal (Customize)        ║
+║  [0] Exit                                ║
+║                                          ║
+║    ESP Status : Connected (/dev/ttyUSB0) ║
+║    VIF Status : Supported                ║
+╚══════════════════════════════════════════╝
+```
+
+Select **option 1** to scan for nearby networks. After scanning, pick a target to enter the Target Menu and launch attacks.
+
+> 💡 **Tip:** WiFi-Nightmare handles monitor mode automatically — just provide the interface name and it does the rest. No need to run `airmon-ng` manually.
+
+---
+
+### 🎮 Step 4: ESP Firmware Flashing (Optional)
+
+If you have an ESP32 or ESP8266 board, flash it with one command — **no PlatformIO or Arduino IDE needed.**
+
+#### 4a. Find the serial port
+
+```bash
+# Run this BEFORE plugging in the ESP
+ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
+
+# Then plug in the ESP, wait 3 seconds, and run again:
+ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
+```
+
+The **new device** that appears is your ESP port.
+
+| ESP Board | Typical Port |
+|-----------|-------------|
+| ESP32 DevKit | `/dev/ttyUSB0` |
+| ESP32-CAM | `/dev/ttyUSB0` |
+| ESP8266 NodeMCU | `/dev/ttyUSB0` or `/dev/ttyACM0` |
+| ESP32-S3 | `/dev/ttyACM0` |
+
+#### 4b. Flash the firmware
+
+```bash
+# For ESP32
+sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp32
+
+# For ESP8266
+sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp8266
+```
+
+**What you'll see during flashing (ESP32 example):**
+```
+Flashing ESP32 firmware...
+Connecting...
+Chip is ESP32-D0WDQ6 (revision 1)
+Features: WiFi, BT, Dual Core, 240MHz
+Crystal is 40MHz
+MAC: 24:6f:28:xx:xx:xx
+Uploading stub...
+Stub running...
+Writing at 0x00001000... (100 %)
+Writing at 0x00008000... (100 %)
+Writing at 0x00010000... (100 %)
+Hard resetting via RTS pin...
+Done!
+```
+
+#### 4c. Verify the flash
+
+Start WiFi-Nightmare with the ESP connected:
+
+```bash
+sudo wifi-nightmare wlan0 /dev/ttyUSB0
+```
+
+If the menu shows **`ESP Status: Connected (/dev/ttyUSB0)`** in green, the firmware is working.
+
+#### 4d. ESP flashing troubleshooting
+
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| `Failed to connect` | Wrong serial port | Re-run the `ls /dev/tty*` test to find the right port |
+| `Failed to connect` | Wrong board type | Try `--board esp8266` if `esp32` fails, or vice versa |
+| `Failed to connect` | USB charge-only cable | Use a **data cable** — charge cables lack data wires |
+| `Failed to connect` | Permission denied | Always use `sudo` (already in the command) |
+| `A fatal error occurred` | ESP not in flash mode | Some ESP32 boards need the BOOT button held during connect |
+| No port appears | Missing USB driver | Install CH340G/CP2102 driver for clone ESP boards |
+| `Timed out waiting for packet header` | Wrong baud rate | Try a different USB port or shorter USB cable |
+
+---
+
+### 🔄 Step 5: Updating
+
+When a new version is released, update like any other system package:
+
+```bash
+# Refresh the package index
+sudo apt update
+
+# Upgrade WiFi-Nightmare
+sudo apt upgrade wifi-nightmare
+```
+
+**Check your current version:**
+```bash
+wifi-nightmare --version
+```
+
+**View the changelog:**
+```bash
+apt changelog wifi-nightmare
+```
+
+> 💡 The Python package updates independently from the ESP firmware. Only re-flash your ESP if the release notes mention firmware changes.
+
+---
+
+### ❌ Step 6: Uninstalling
+
+```bash
+# Remove the package (keeps config and data)
+sudo apt remove wifi-nightmare
+
+# Remove everything (config, handshakes, logs, database)
+sudo apt purge wifi-nightmare
+
+# Remove the APT repository (optional cleanup)
+sudo rm /etc/apt/sources.list.d/wifi-nightmare.list
+sudo rm /usr/share/keyrings/wifi-nightmare.gpg
+sudo apt update
+```
+
+---
+
+### 👨‍💻 Development Setup (From Source)
+
+For contributors who want to modify the code or run the latest unreleased version:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/YoussefAlkhodary/WiFi-Nightmare.git
+cd WiFi-Nightmare
+
+# 2. Install system dependencies
+sudo apt-get install aircrack-ng hcxtools iw hostapd dnsmasq reaver pixiewps
+
+# 3. Install the package in editable/development mode
+pip install -e .
+
+# 4. Run
+sudo wifi-nightmare wlan0
+```
+
+**Run tests:**
+```bash
+pip install pytest
+python3 -m pytest tests/
+```
+
+**Uninstall dev version:**
+```bash
+pip uninstall wifi-nightmare
+```
+
+---
+
+### 📋 Command Quick Reference
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  COMMAND                                │  WHAT IT DOES        │
+├────────────────────────────────────────────────────────────────┤
+│  curl ... install.sh | sudo bash        │  One-click install   │
+│  sudo apt install wifi-nightmare        │  Install via APT     │
+│  sudo apt upgrade wifi-nightmare        │  Update to latest    │
+│  sudo apt purge wifi-nightmare          │  Full uninstall      │
+│  sudo wifi-nightmare wlan0              │  Run (no ESP)        │
+│  sudo wifi-nightmare wlan0 /dev/ttyUSB0 │  Run (with ESP)      │
+│  wifi-nightmare flash-esp /dev/ttyUSB0  │  Flash ESP firmware  │
+│  wifi-nightmare --version               │  Check version       │
+│  wifi-nightmare --help                  │  Show usage help     │
+│  python3 -m wifi_nightmare ...          │  Run via Python      │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🐛 Troubleshooting
+
+| Problem | Likely Cause | Solution |
+|---------|-------------|----------|
+| `wifi-nightmare: command not found` | Package not installed | Run `sudo apt install wifi-nightmare` |
+| `Permission denied` when running | Missing `sudo` | Always use `sudo wifi-nightmare ...` |
+| `Interface wlan0 not found` | Wrong interface name | Run `iw dev` to list available interfaces |
+| `Monitor mode failed` | Unsupported adapter | Get an RTL8812AU adapter (Alfa AWUS036ACH) |
+| Menu shows greyed-out attacks | Missing hardware/deps | Check VIF support and install recommended packages |
+| `No module named wifi_nightmare` (dev mode) | Not installed | Run `pip install -e .` from repo root |
+| `esptool: command not found` | Missing after upgrade | `sudo apt install --reinstall wifi-nightmare esptool` |
+| `Failed to connect to ESP` | Wrong serial port | Use `ls /dev/ttyUSB*` before/after plugging to find port |
+| `No wifi adapter found` | No monitor-mode adapter | Buy a compatible adapter (see Prerequisites table) |
 
 ---
 
@@ -124,15 +441,13 @@ Only needed for ESP-based Evil Twin attacks.
 ### Standalone Mode (WiFi adapter only)
 
 ```bash
-cd WiFi-Nightmare/WiFi-Nightmare
-sudo python3 main.py wlan0
+sudo wifi-nightmare wlan0
 ```
 
 ### Hybrid Mode (WiFi adapter + ESP)
 
 ```bash
-cd WiFi-Nightmare/WiFi-Nightmare
-sudo python3 main.py wlan0 /dev/ttyUSB0
+sudo wifi-nightmare wlan0 /dev/ttyUSB0
 ```
 
 Find your ESP serial port:
@@ -141,11 +456,17 @@ ls /dev/ttyUSB*    # Most common
 ls /dev/ttyACM*    # Some boards
 ```
 
+### Via Python Module
+
+```bash
+sudo python3 -m wifi_nightmare wlan0
+sudo python3 -m wifi_nightmare wlan0 /dev/ttyUSB0
+```
+
 ### Finding Your Interface Name
 
 ```bash
-iw dev              # Shows managed interfaces
-iwconfig            # Alternative (legacy)
+iw dev              # Shows wireless interfaces
 ip link show        # Shows all network interfaces
 ```
 
