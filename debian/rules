@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+export PYBUILD_NAME=wifi-nightmare
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_clean:
+	rm -rf .pybuild/
+
+override_dh_shlibdeps:
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info

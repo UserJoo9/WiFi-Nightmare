@@ -1,0 +1,16 @@
+CLAUDE.md
+__pycache__
+.vscode
+.pio
+build
+logs/
+handshakes/
+wifi_db.json
+vendors_cache.json
+*.pyc
+.env
+*.deb
+*.egg-info/
+dist/
+.pybuild/
+.claude

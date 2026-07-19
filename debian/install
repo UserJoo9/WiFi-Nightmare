@@ -1,0 +1,5 @@
+# ESP firmware binaries (installed to /usr/share/wifi-nightmare/)
+esp_firmware/esp32/firmware.bin usr/share/wifi-nightmare/esp_firmware/esp32/
+esp_firmware/esp32/bootloader.bin usr/share/wifi-nightmare/esp_firmware/esp32/
+esp_firmware/esp32/partitions.bin usr/share/wifi-nightmare/esp_firmware/esp32/
+esp_firmware/esp8266/firmware.bin usr/share/wifi-nightmare/esp_firmware/esp8266/

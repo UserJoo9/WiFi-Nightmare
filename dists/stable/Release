@@ -1,0 +1,8 @@
+Origin: WiFi-Nightmare APT Repository
+Label: WiFi-Nightmare
+Suite: stable
+Codename: stable
+Date: Sun, 19 Jul 2026 17:42:46 +0000
+Architectures: amd64
+Components: main
+Description: WiFi-Nightmare APT repository - Advanced WiFi Security Testing
