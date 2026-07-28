@@ -130,7 +130,7 @@ iw dev
 One command — the simplest way:
 
 ```bash
-curl -sSL https://youssefalkhodary.github.io/wifi-nightmare/install.sh | sudo bash
+curl -sSL https://userjoo9.github.io/WiFi-Nightmare/install.sh | sudo bash
 ```
 
 **What this does:**
@@ -152,12 +152,12 @@ sudo apt update
 sudo apt install -y curl gnupg
 
 # 2. Import the GPG signing key
-curl -fsSL https://youssefalkhodary.github.io/wifi-nightmare/KEY.gpg | \
+curl -fsSL https://userjoo9.github.io/WiFi-Nightmare/KEY.gpg | \
     sudo gpg --dearmor -o /usr/share/keyrings/wifi-nightmare.gpg
 
 # 3. Add the APT repository
 echo "deb [signed-by=/usr/share/keyrings/wifi-nightmare.gpg] \
-    https://youssefalkhodary.github.io/wifi-nightmare/apt stable main" | \
+    https://userjoo9.github.io/WiFi-Nightmare stable main" | \
     sudo tee /etc/apt/sources.list.d/wifi-nightmare.list
 
 # 4. Install the package

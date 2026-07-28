@@ -17,7 +17,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential devscripts debhelper dh-python python3-all python3-setuptools python3-build
+          sudo apt-get install -y build-essential devscripts debhelper dh-python python3-all python3-setuptools python3-build dpkg-dev
 
       - name: Build Debian package
         run: |
@@ -36,33 +36,35 @@ jobs:
       - name: Update APT repository on gh-pages
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          # Check out gh-pages branch (create if not exists)
+          # Save absolute paths before switching branches
+          DEB_FILE=$(realpath ../wifi-nightmare_*.deb)
+          cp install.sh /tmp/wifi-nightmare-install.sh
+
+          # Switch to gh-pages branch (create orphan if missing)
           git fetch origin gh-pages 2>/dev/null || true
           git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
-          git rm -r . 2>/dev/null || true
+          git rm -rf . 2>/dev/null || true
 
           # Create APT repo structure
           mkdir -p pool/main/w/wifi-nightmare/
           mkdir -p dists/stable/main/binary-amd64/
 
-          # Copy the .deb package
-          cp ../wifi-nightmare_*.deb pool/main/w/wifi-nightmare/
+          # Copy .deb and install script
+          cp "$DEB_FILE" pool/main/w/wifi-nightmare/
+          cp /tmp/wifi-nightmare-install.sh install.sh
 
           # Generate Packages metadata
           dpkg-scanpackages --multiversion pool/ > dists/stable/main/binary-amd64/Packages
           gzip -k -f dists/stable/main/binary-amd64/Packages
 
           # Generate Release file
-          cat > dists/stable/Release << RELEOF
-          Origin: WiFi-Nightmare APT Repository
-          Label: WiFi-Nightmare
-          Suite: stable
-          Codename: stable
-          Date: $(date -Ru)
-          Architectures: amd64
-          Components: main
-          Description: WiFi-Nightmare APT repository - Advanced WiFi Security Testing
-          RELEOF
+          echo "Origin: WiFi-Nightmare APT Repository" > dists/stable/Release
+          echo "Label: WiFi-Nightmare" >> dists/stable/Release
+          echo "Suite: stable" >> dists/stable/Release
+          echo "Codename: stable" >> dists/stable/Release
+          echo "Architectures: amd64" >> dists/stable/Release
+          echo "Components: main" >> dists/stable/Release
+          echo "Description: WiFi-Nightmare APT repository" >> dists/stable/Release
 
           # Commit and push
           git config user.name "${{ github.actor }}"

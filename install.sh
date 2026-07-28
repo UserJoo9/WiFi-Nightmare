@@ -11,7 +11,7 @@
 
 set -e
 
-REPO_BASE="https://youssefalkhodary.github.io/wifi-nightmare"
+REPO_BASE="https://userjoo9.github.io/WiFi-Nightmare"
 KEY_URL="$REPO_BASE/KEY.gpg"
 KEYRING="/usr/share/keyrings/wifi-nightmare.gpg"
 SOURCES_LIST="/etc/apt/sources.list.d/wifi-nightmare.list"
@@ -33,16 +33,14 @@ apt-get update -qq
 apt-get install -y -qq curl gnupg apt-transport-https 2>/dev/null || true
 
 echo "[*] Importing GPG key..."
-if curl -fsSL "$KEY_URL" | gpg --dearmor -o "$KEYRING" 2>/dev/null; then
+if curl -fsSL "$KEY_URL" | gpg --dearmor -o "$KEYRING" 2>/dev/null && [ -s "$KEYRING" ]; then
     echo "[*] GPG key imported successfully."
+    echo "deb [signed-by=$KEYRING] $REPO_BASE stable main" | tee "$SOURCES_LIST" > /dev/null
 else
     echo "[!] Could not import GPG key (this is OK for unsigned repos)."
     echo "    Installing without signature verification..."
+    echo "deb [trusted=yes] $REPO_BASE stable main" | tee "$SOURCES_LIST" > /dev/null
 fi
-
-echo "[*] Adding APT repository..."
-echo "deb [signed-by=$KEYRING] $REPO_BASE/apt stable main" | tee "$SOURCES_LIST" > /dev/null 2>/dev/null || \
-    echo "deb [trusted=yes] $REPO_BASE/apt stable main" | tee "$SOURCES_LIST" > /dev/null
 
 echo "[*] Updating package list..."
 apt-get update -qq
