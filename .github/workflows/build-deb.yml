@@ -57,14 +57,8 @@ jobs:
           dpkg-scanpackages --multiversion pool/ > dists/stable/main/binary-amd64/Packages
           gzip -k -f dists/stable/main/binary-amd64/Packages
 
-          # Generate Release file
-          echo "Origin: WiFi-Nightmare APT Repository" > dists/stable/Release
-          echo "Label: WiFi-Nightmare" >> dists/stable/Release
-          echo "Suite: stable" >> dists/stable/Release
-          echo "Codename: stable" >> dists/stable/Release
-          echo "Architectures: amd64" >> dists/stable/Release
-          echo "Components: main" >> dists/stable/Release
-          echo "Description: WiFi-Nightmare APT repository" >> dists/stable/Release
+          # Generate Release file with proper hashes and date
+          apt-ftparchive release dists/stable > dists/stable/Release 2>/dev/null
 
           # Commit and push
           git config user.name "${{ github.actor }}"

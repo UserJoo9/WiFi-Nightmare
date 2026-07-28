@@ -28,9 +28,8 @@ curl -sSL https://userjoo9.github.io/WiFi-Nightmare/install.sh | sudo bash
 
 Or manually:
 ```bash
-sudo apt update && sudo apt install -y curl gnupg
-curl -fsSL https://userjoo9.github.io/WiFi-Nightmare/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/wifi-nightmare.gpg
-echo "deb [signed-by=/usr/share/keyrings/wifi-nightmare.gpg] https://userjoo9.github.io/WiFi-Nightmare stable main" | sudo tee /etc/apt/sources.list.d/wifi-nightmare.list
+sudo apt update && sudo apt install -y curl
+echo "deb [trusted=yes] https://userjoo9.github.io/WiFi-Nightmare stable main" | sudo tee /etc/apt/sources.list.d/wifi-nightmare.list
 sudo apt update && sudo apt install wifi-nightmare
 ```
 
