@@ -71,7 +71,21 @@ sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp32  # Flash ESP firmware
 | ESP Evil Twin | ESP32/ESP8266 over serial |
 | Pixie Dust (WPS) | reaver + pixiewps |
 
-**Recommended adapters:** RTL8812AU (Alfa AWUS036ACH) supports everything. Built-in laptop WiFi cards usually don't support monitor mode.
+### Adapter Compatibility Guide
+
+| Chipset | Example Adapter | Monitor | Injection | VIF / AP | Rating |
+|---------|----------------|:-------:|:---------:|:--------:|:------:|
+| **RTL8812AU** | Alfa AWUS036ACH | ✅ | ✅ | ✅ | ⭐ Full |
+| **RTL8814AU** | Alfa AWUS1900 | ✅ | ✅ | ✅ | ⭐ Full |
+| **RTL8821AU** | Comfast CF-912AC | ✅ | ✅ | ✅ | ⭐ Full |
+| **AR9271** | TP-Link TL-WN722N v1 | ✅ | ✅ | ❌ | ⚡ Basic |
+| **RTL8187** | Alfa AWUS036H | ✅ | ✅ | ❌ | ⚡ Basic |
+| **RTL8188EU** | TP-Link TL-WN725N | ✅ | ✅ | ❌ | ⚡ Basic |
+
+🟢 **Full** = All features including Software Evil Twin<br>
+⚡ **Basic** = Scanning, deauth, handshake, pixie dust — no Virtual AP
+
+> Built-in laptop WiFi cards usually **don't support monitor mode**. Get an external USB adapter. For full support, pick RTL8812AU (Alfa AWUS036ACH).
 
 ---
 
