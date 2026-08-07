@@ -124,6 +124,10 @@ WiFi-Nightmare/
 
 This tool is for **authorized security testing and educational purposes only**. Unauthorized access to computer networks is illegal. Always obtain explicit permission before testing.
 
+## License
+
+Released under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for the full text.
+
 ## Credits
 
 - **Deportal2**: [CDFER/Captive-Portal-ESP32](https://github.com/CDFER/Captive-Portal-ESP32)
