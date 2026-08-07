@@ -1,6 +1,6 @@
 # WiFi-Nightmare
 
-**v2.1.0** — Advanced WiFi security auditing and penetration testing tool.
+**v2.1.1** — Advanced WiFi security auditing and penetration testing tool.
 
 Combines a Python CLI with optional ESP32/ESP8266 firmware for Evil Twin, Deauthentication, Handshake capture, WPS Pixie Dust, and captive portal attacks.
 
@@ -91,7 +91,7 @@ sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp32  # Flash ESP firmware
 ## Development Setup
 
 ```bash
-git clone https://github.com/YoussefAlkhodary/WiFi-Nightmare.git
+git clone https://github.com/UserJoo9/WiFi-Nightmare.git
 cd WiFi-Nightmare
 sudo apt-get install aircrack-ng hcxtools iw hostapd dnsmasq reaver pixiewps
 pip install -e .

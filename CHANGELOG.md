@@ -4,6 +4,19 @@ All notable changes to WiFi-Nightmare will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.1.1] - 2026-08-07
+
+### Added
+- **BSSID masking** — all BSSIDs masked to first/last octet only (e.g. `30:99:35:8e:16:6b` → `30:xx:xx:xx:xx:6b`) across the entire TUI and exported files for privacy
+- **SSID-based export filenames** — handshakes, pixie dust logs, and hc22000 files named by network name instead of full BSSID
+- **Deauth tool error surfacing** — mdk4/mdk3/aireplay-ng failures now printed instead of failing silently
+
+### Changed
+- **Faster handshake capture** — kick-once + long silent window strategy (burst then 30s quiet) with 1s polling, so slow-reconnecting clients aren't re-kicked mid-handshake
+- **Pixie Dust** — accurate WPS lock-state parsing from wash table, quote-stripped PIN/PSK extraction, and post-mortem failure diagnosis (M1/M3/pixiewps)
+- **VIF support check** — PHY-scoped `iw list` parsing so multi-interface support isn't misreported when any adapter on the machine advertises it
+- **Menus** — removed emoji icons from all menus
+
 ## [2.1.0] - 2026-07-19
 
 ### Added

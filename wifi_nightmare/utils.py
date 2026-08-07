@@ -1,5 +1,6 @@
 # utils.py
 import os
+import re
 import sys
 import subprocess
 import time
@@ -19,6 +20,61 @@ except ImportError:
 
 def get_vendor(mac):
     return lookup_vendor(mac)
+
+
+def mask_bssid(bssid):
+    """Mask a BSSID, keeping only the first and last octet.
+
+    '30:99:35:8e:16:6b' -> '30:xx:xx:xx:xx:6b'
+
+    Handles both ':' and '-' separators and any letter case. Returns the
+    input unchanged if it doesn't look like a MAC address.
+    """
+    if not bssid:
+        return bssid
+    parts = bssid.strip().lower().replace('-', ':').split(':')
+    if len(parts) != 6 or not all(len(p) == 2 for p in parts):
+        return bssid
+    return f"{parts[0]}:xx:xx:xx:xx:{parts[-1]}"
+
+
+def mask_bssid_filename(bssid):
+    """Masked BSSID safe for file names: '30:xx:xx:xx:xx:6b'."""
+    return mask_bssid(bssid).replace(':', '-')
+
+
+def scrub_bssid(text, bssid):
+    """Replace every rendering of the full BSSID in text with the masked form.
+
+    Covers ':'-separated, '-'-separated and separator-free spellings in any
+    case (reaver and other tools print MACs in different formats). Returns
+    the text unchanged if the BSSID doesn't look like a MAC address.
+    """
+    if not text or not bssid:
+        return text
+    masked = mask_bssid(bssid)
+    core = bssid.strip().lower().replace(':', '').replace('-', '')
+    if len(core) != 12 or not core.isalnum():
+        return text
+    octets = [core[i:i + 2] for i in range(0, 12, 2)]
+    result = text
+    for sep in (':', '-', ''):
+        pattern = re.compile(re.escape(sep.join(octets)), re.IGNORECASE)
+        result = pattern.sub(masked, result)
+    return result
+
+
+def safe_ssid(ssid):
+    """Filesystem-safe form of an SSID for exported file names."""
+    raw = (ssid or "").strip()
+    # Check the RAW value: sanitizing '<HIDDEN>' strips the angle brackets
+    # into 'HIDDEN', which would then pass the guard below.
+    if not raw or raw in ("Unknown", "<HIDDEN>"):
+        return "Unknown_SSID"
+    safe = "".join(c for c in raw if c.isalpha() or c.isdigit() or c == ' ').strip()
+    if not safe:
+        safe = "Unknown_SSID"
+    return safe
 
 def get_current_time_12h():
     return datetime.now().strftime("%I:%M %p")
@@ -235,7 +291,7 @@ def verify_password(pcap_file, bssid, ssid, password):
         with open(temp_pass_file, 'w') as f:
             f.write(password)
         
-        print(f"{C_CYAN}    [Cracker] Target: {ssid} ({bssid}) | Pass: {password}{C_RESET}")
+        print(f"{C_CYAN}    [Cracker] Target: {ssid} ({mask_bssid(bssid)}) | Pass: {password}{C_RESET}")
         
         # Build aircrack-ng command with BSSID and SSID for precise targeting
         cmd = [
@@ -261,7 +317,7 @@ def verify_password(pcap_file, bssid, ssid, password):
                 print(f"{C_YELLOW}    >>> Result: Wrong Password (Handshake is Valid).{C_RESET}")
             elif "No valid WPA handshakes" in output:
                 # No handshake found for this BSSID
-                print(f"{C_RED}    >>> Result: No handshake found for BSSID {bssid}.{C_RESET}")
+                print(f"{C_RED}    >>> Result: No handshake found for BSSID {mask_bssid(bssid)}.{C_RESET}")
                 print(f"    >>> Full Output:\n{output}")
             else:
                 # Other error

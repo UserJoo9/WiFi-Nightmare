@@ -163,11 +163,11 @@ class WifiGTR:
 
         print(f"\n{C_CYAN}--- PIXIE DUST ATTACK ---{C_RESET}")
         print(f"Target  : {C_GREEN}{ssid}{C_RESET}")
-        print(f"BSSID   : {bssid}")
+        print(f"BSSID   : {utils.mask_bssid(bssid)}")
         print(f"Channel : {C_YELLOW}{channel}{C_RESET}")
 
         try:
-            from config import PIXIE_DUST_TIMEOUT
+            from wifi_nightmare.config import PIXIE_DUST_TIMEOUT
             timeout = PIXIE_DUST_TIMEOUT
         except ImportError:
             timeout = 120
@@ -516,7 +516,7 @@ class WifiGTR:
                 if 0 <= idx < len(self.display_list):
                     bssid = self.display_list[idx]
                     channel = self.scanner.networks[bssid]['Channel']
-                    print(f"\n{C_GREEN}[+] Target Selected: {bssid} (CH: {channel}){C_RESET}")
+                    print(f"\n{C_GREEN}[+] Target Selected: {utils.mask_bssid(bssid)} (CH: {channel}){C_RESET}")
                     utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
                     return (bssid, channel)
                 else:
@@ -562,7 +562,7 @@ class WifiGTR:
         
         results_count = 0
         for i, (bssid, channel) in enumerate(hidden_targets):
-            print(f"\n{C_WHITE}--- Target {i+1}/{len(hidden_targets)}: {bssid} ---{C_RESET}")
+            print(f"\n{C_WHITE}--- Target {i+1}/{len(hidden_targets)}: {utils.mask_bssid(bssid)} ---{C_RESET}")
             utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
             
             attacker = NetworkAttacker(
@@ -590,7 +590,7 @@ class WifiGTR:
 
             if attacker.success and attacker.result_data:
                 self.db.save(bssid, attacker.result_data['SSID'])
-                print(f"\n{C_GREEN}[+] SUCCESS: {bssid} -> {attacker.result_data['SSID']}{C_RESET}")
+                print(f"\n{C_GREEN}[+] SUCCESS: {utils.mask_bssid(bssid)} -> {attacker.result_data['SSID']}{C_RESET}")
                 results_count += 1
         
         print(f"\n{C_CYAN}=== Mass Attack Finished. Revealed: {results_count} ==={C_RESET}")
@@ -612,7 +612,7 @@ class WifiGTR:
         if mode == "handshake":
             timeout = 120
             try:
-                from config import config as cfg
+                from wifi_nightmare.config import config as cfg
                 timeout = cfg.get("attacks", {}).get("handshake_timeout", 120)
             except Exception:
                 pass
@@ -655,7 +655,7 @@ class WifiGTR:
             if mode in ["deauth_only", "handshake", "reveal"]:
                 attacker.start_deauth_thread()
                 if mode == "deauth_only":
-                    print(f"{C_YELLOW}[+] Sending deauth packets to {bssid}{C_RESET}")
+                    print(f"{C_YELLOW}[+] Sending deauth packets to {utils.mask_bssid(bssid)}{C_RESET}")
                     print(f"{C_YELLOW}[+] Targeting all clients on channel {channel}{C_RESET}")
 
             # Start sniffer in a continuous background thread (gapless)
@@ -756,7 +756,7 @@ class WifiGTR:
 
         if mode == "deauth_only":
             print(f"\n{C_YELLOW}[*] Deauth Attack Finished{C_RESET}")
-            print(f"    Target: {bssid}")
+            print(f"    Target: {utils.mask_bssid(bssid)}")
             print(f"    Channel: {channel}")
             print(f"    SSID: {current_ssid if current_ssid != 'Unknown' else 'Hidden'}")
             print(f"    Clients Targeted: {len(attacker.clients)}")

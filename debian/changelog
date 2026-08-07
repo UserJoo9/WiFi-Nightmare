@@ -1,3 +1,14 @@
+wifi-nightmare (2.1.1) unstable; urgency=medium
+
+  * BSSID masking for privacy: all BSSIDs shown as first/last octet only across the TUI and exported files.
+  * Export files named by SSID instead of full BSSID (handshakes, pixie dust logs, hc22000).
+  * Faster handshake capture: kick-once + long silent window strategy, 1s polling, deauth tool errors surfaced.
+  * Pixie Dust: accurate WPS lock-state detection from wash, quote-stripped PIN/PSK parsing, failure diagnosis.
+  * VIF support check: PHY-scoped iw list parsing, no more false multi-interface support reports.
+  * Removed emoji icons from all menus.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Fri, 07 Aug 2026 12:00:00 +0000
+
 wifi-nightmare (2.1.0) unstable; urgency=medium
 
   * Initial Debian packaging for APT-based install.

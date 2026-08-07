@@ -4,7 +4,7 @@ import subprocess
 import threading
 from scapy.all import sniff, Dot11, Dot11Beacon, Dot11Elt, RadioTap
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET
-from wifi_nightmare.utils import get_vendor
+from wifi_nightmare.utils import get_vendor, mask_bssid
 from wifi_nightmare.logger import logger
 
 class NetworkScanner:
@@ -251,7 +251,7 @@ class ClientMonitor:
             
             ch_display = f"{C_YELLOW}CH:{net_data['channel']}{C_RESET}"
 
-            print(f"{C_GREEN}[+] Network:{C_RESET} {ssid_display}  {C_GREY}({bssid}){C_RESET}  {ch_display}")
+            print(f"{C_GREEN}[+] Network:{C_RESET} {ssid_display}  {C_GREY}({mask_bssid(bssid)}){C_RESET}  {ch_display}")
             print(f"    {'Client MAC':<20} {'Device Vendor'}")
             print(f"    {'-'*45}")
 

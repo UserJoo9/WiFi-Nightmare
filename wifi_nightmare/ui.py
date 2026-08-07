@@ -5,6 +5,7 @@ from wifi_nightmare.config import (
     C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET,
     BANNER, VERSION, AUTHOR
 )
+from wifi_nightmare.utils import mask_bssid
 
 def clear_screen():
     print("\033[H\033[J", end="")
@@ -19,10 +20,10 @@ def print_main_menu(interface):
     print_banner()
     print(f"Interface: {C_CYAN}{interface}{C_RESET}")
     print("--------------------------------------------------")
-    print(f"[{C_GREEN}1{C_RESET}] 🔍 Scan & Reconnaissance")
-    print(f"[{C_GREEN}2{C_RESET}] 📡 Client Monitor (Live View)")
-    print(f"[{C_GREEN}3{C_RESET}] 💥 Mass Attack (Auto-Pilot)")
-    print(f"[{C_GREEN}4{C_RESET}] 📂 Offline Database & Cracking")
+    print(f"[{C_GREEN}1{C_RESET}] Scan & Reconnaissance")
+    print(f"[{C_GREEN}2{C_RESET}] Client Monitor (Live View)")
+    print(f"[{C_GREEN}3{C_RESET}] Mass Attack (Auto-Pilot)")
+    print(f"[{C_GREEN}4{C_RESET}] Offline Database & Cracking")
     print(f"[{C_RED}0{C_RESET}] Exit")
     print("--------------------------------------------------")
 
@@ -30,17 +31,17 @@ def print_target_menu(ssid, bssid, channel, client_count):
     clear_screen()
     print(f"{C_CYAN}--- TARGET SELECTED ---{C_RESET}")
     print(f"Target  : {C_GREEN}{ssid}{C_RESET}")
-    print(f"BSSID   : {bssid}")
+    print(f"BSSID   : {mask_bssid(bssid)}")
     print(f"Channel : {C_YELLOW}{channel}{C_RESET}")
     print(f"Clients : {C_YELLOW}{client_count}{C_RESET}")
     print("-----------------------")
-    print(f"{C_WHITE}[1] 🤝 Capture Handshake (WPA/WPA2){C_RESET}")
-    print(f"{C_WHITE}[2] 👁️  Reveal Hidden SSID{C_RESET}")
-    print(f"{C_WHITE}[3] 🚫 Deauth Attack (Disconnect){C_RESET}")
-    print(f"{C_WHITE}[4] 👂 Passive Monitor (Stealth){C_RESET}")
-    print(f"{C_WHITE}[5] 🔓 Generate Hashcat File (hc22000){C_RESET}")
-    print(f"{C_WHITE}[8] ⚡ Pixie Dust Attack (WPS){C_RESET}")
-    
+    print(f"{C_WHITE}[1] Capture Handshake (WPA/WPA2){C_RESET}")
+    print(f"{C_WHITE}[2] Reveal Hidden SSID{C_RESET}")
+    print(f"{C_WHITE}[3] Deauth Attack (Disconnect){C_RESET}")
+    print(f"{C_WHITE}[4] Passive Monitor (Stealth){C_RESET}")
+    print(f"{C_WHITE}[5] Generate Hashcat File (hc22000){C_RESET}")
+    # [6]/[7]/[8] (Evil Twin ESP / Software, Pixie Dust) are printed by
+    # main.py, which knows the ESP connection and WPS-detection status.
 def print_database_menu():
     clear_screen()
     print(f"{C_CYAN}--- DATABASE & CRACKING ---{C_RESET}")
@@ -94,7 +95,7 @@ def print_scan_table(interface, networks, lock):
             elif info['Hidden']: ssid_display = f"{C_GREY}<HIDDEN>{C_RESET}"
             else: ssid_display = f"{C_WHITE}{ssid_raw}{C_RESET}"
             wps_mark = f"{C_GREEN}Yes{C_RESET}" if info.get('WPS') else f"{C_GREY}No {C_RESET}"
-            print(f"{i:<4} {bssid:<18} {pwr_color}{rssi:<5}{C_RESET} {hs_mark:<13} {wps_mark:<14} {info['Channel']:<4} {enc:<25} {vendor:<16} {cl_str} {ssid_display}")
+            print(f"{i:<4} {mask_bssid(bssid):<18} {pwr_color}{rssi:<5}{C_RESET} {hs_mark:<13} {wps_mark:<14} {info['Channel']:<4} {enc:<25} {vendor:<16} {cl_str} {ssid_display}")
     return display_list
 
 def print_attack_summary(result):
@@ -104,7 +105,7 @@ def print_attack_summary(result):
     print(f"{C_GREEN}          ATTACK SUCCESS REPORT           {C_RESET}")
     print(f"{C_GREEN}=========================================={C_RESET}")
     print(f"SSID (Name) : {C_CYAN}{result['SSID']}{C_RESET}")
-    print(f"BSSID (MAC) : {C_WHITE}{result['BSSID']}{C_RESET}")
+    print(f"BSSID (MAC) : {C_WHITE}{mask_bssid(result['BSSID'])}{C_RESET}")
     print(f"Channel     : {C_YELLOW}{result['Channel']}{C_RESET}")
     print(f"Clients     : {C_YELLOW}~{result['Clients']} Detected{C_RESET}")
     print("------------------------------------------")
@@ -121,6 +122,9 @@ def show_saved_db(db_handler):
     else:
         print(f"{'ID':<4} {'BSSID':<20} {'Handshake':<12} {'Time':<10} {'SSID'}")
         print("-" * 70)
+        # NOTE: BSSIDs are displayed masked (first/last octet only) for
+        # privacy, but saved_list still carries the FULL BSSID so attacks
+        # and password verification can be re-targeted from this list.
         saved_list = []
         i = 0
         for bssid, data in db_handler.known_networks.items():
@@ -134,6 +138,6 @@ def show_saved_db(db_handler):
                 hs = "NO"
                 tm = ""
             hs_col = f"{C_GREEN}{hs}{C_RESET}" if hs == "YES" else f"{C_RED}{hs}{C_RESET}"
-            print(f"{i:<4} {bssid:<20} {hs_col:<20} {tm:<10} {C_GREEN}{ssid}{C_RESET}")
+            print(f"{i:<4} {mask_bssid(bssid):<20} {hs_col:<20} {tm:<10} {C_GREEN}{ssid}{C_RESET}")
             i += 1
         return saved_list

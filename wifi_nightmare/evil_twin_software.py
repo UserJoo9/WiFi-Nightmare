@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs
 from scapy.all import sendp, sniff, RadioTap, Dot11, Dot11Deauth
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_RESET
-from wifi_nightmare.utils import run_command, verify_password
+from wifi_nightmare.utils import run_command, verify_password, mask_bssid
 from wifi_nightmare.logger import logger
 
 PORTAL_AP_IP = "10.0.0.1"
@@ -866,7 +866,7 @@ no-poll
 
                         with open("cracked.txt", "a") as f:
                             ts = time.strftime("%Y-%m-%d %H:%M:%S")
-                            f.write(f"[{ts}] SSID: {self.target_ssid} | BSSID: {self.target_bssid} | Password: {raw_pass}\n")
+                            f.write(f"[{ts}] SSID: {self.target_ssid} | MAC: {mask_bssid(self.target_bssid)} | Password: {raw_pass}\n")
 
                         time.sleep(3)
                         break
