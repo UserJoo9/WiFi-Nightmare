@@ -1,6 +1,6 @@
 # WiFi-Nightmare
 
-**v2.1.1** — Advanced WiFi security auditing and penetration testing tool.
+**v2.1.2** — Advanced WiFi security auditing and penetration testing tool.
 
 Combines a Python CLI with optional ESP32/ESP8266 firmware for Evil Twin, Deauthentication, Handshake capture, WPS Pixie Dust, and captive portal attacks.
 
@@ -9,13 +9,16 @@ Combines a Python CLI with optional ESP32/ESP8266 firmware for Evil Twin, Deauth
 - **Network Scanning** — Discover WiFi networks and connected clients
 - **Deauthentication Attacks** — scapy → mdk4 → aireplay-ng fallback chain
 - **Handshake Capture** — WPA/WPA2 handshakes + Hashcat `.hc22000` conversion
-- **SSID Reveal** — Decloak hidden networks
-- **Evil Twin** — Fake AP to capture credentials (ESP or software-only with VIF)
+- **Handshake Cracking** — Crack captured handshakes with aircrack-ng + any wordlist directly from the target menu
+- **SSID Reveal** — Decloak hidden networks (name is remembered across the session)
+- **Evil Twin (Software)** — Fake AP with captive portal using hostapd + dnsmasq — no ESP needed (requires VIF support)
+- **Evil Twin (ESP)** — Hardware-assisted Evil Twin via ESP32/ESP8266 over serial
+- **Captive Portal** — Auto-detection for all major OEMs: Apple iOS/macOS, Android (Google, Samsung One UI, Oppo/ColorOS, Xiaomi/MIUI, Vivo/Funtouch), Windows NCSI, Kindle
 - **Pixie Dust (WPS)** — WPS PIN recovery via reaver + pixiewps
-- **Captive Portal** — Auto-detection for all major OEMs (Apple, Android, Samsung, Windows)
 - **9 Branded Portal Templates** — TP-Link, Huawei, ZTE, D-Link, Tenda, Vodafone, Etisalat, WE, Orange
 - **Custom Portal** — Upload your own HTML without reflashing ESP
 - **Database** — Persistent JSON store for networks, handshakes, and WPS data
+- **BSSID Privacy** — All BSSIDs masked to `xx:xx:xx:xx` form in every log and output
 - **Mass Attack** — Automated deauth on multiple hidden networks
 
 ---
@@ -61,6 +64,24 @@ sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp32  # Flash ESP firmware
 
 ---
 
+## Target Menu Options
+
+Once you select a network, the target menu offers:
+
+| Option | Action | Requires |
+|--------|--------|----------|
+| `1` | Capture Handshake | Monitor + injection |
+| `2` | Reveal Hidden SSID | Monitor + injection |
+| `3` | Deauth Attack | Monitor + injection |
+| `4` | Passive Listen | Monitor |
+| `5` | Generate hc22000 | Captured handshake |
+| `6` | Evil Twin (ESP) | ESP connected |
+| `7` | Evil Twin (Software) | VIF + hostapd + dnsmasq |
+| `8` | Pixie Dust (WPS) | reaver + pixiewps |
+| `9` | **Crack Handshake (aircrack-ng + Wordlist)** | Captured handshake |
+
+---
+
 ## Hardware Compatibility
 
 | Feature | Requires |
@@ -77,14 +98,34 @@ sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp32  # Flash ESP firmware
 | **RTL8812AU** | Alfa AWUS036ACH | ✅ | ✅ | ✅ | ⭐ Full |
 | **RTL8814AU** | Alfa AWUS1900 | ✅ | ✅ | ✅ | ⭐ Full |
 | **RTL8821AU** | Comfast CF-912AC | ✅ | ✅ | ✅ | ⭐ Full |
-| **AR9271** | TP-Link TL-WN722N v1 | ✅ | ✅ | ❌ | ⚡ Basic |
+| **AR9271** | TP-Link TL-WN722N v1 | ✅ | ✅ | ✅ | ⭐ Full |
 | **RTL8187** | Alfa AWUS036H | ✅ | ✅ | ❌ | ⚡ Basic |
 | **RTL8188EU** | TP-Link TL-WN725N | ✅ | ✅ | ❌ | ⚡ Basic |
 
-🟢 **Full** = All features including Software Evil Twin<br>
+🟢 **Full** = All features including Software Evil Twin (AP + monitor VIFs simultaneously)<br>
 ⚡ **Basic** = Scanning, deauth, handshake, pixie dust — no Virtual AP
 
-> Built-in laptop WiFi cards usually **don't support monitor mode**. Get an external USB adapter. For full support, pick RTL8812AU (Alfa AWUS036ACH).
+> Built-in laptop WiFi cards usually **don't support monitor mode**. Get an external USB adapter. For full support, pick RTL8812AU (Alfa AWUS036ACH) or TL-WN722N v1 (AR9271).
+
+---
+
+## Captive Portal Support
+
+The software Evil Twin captive portal triggers automatically on:
+
+| OS / OEM | Probe Path | Method |
+|----------|-----------|--------|
+| Android / Google | `/generate_204`, `/gen_204` | 302 Redirect |
+| Samsung One UI | `/check_network_status.txt` | 302 Redirect |
+| Apple iOS / macOS | `/hotspot-detect.html` | 302 Redirect |
+| Oppo / ColorOS | `/mobile/status.php` | 302 Redirect |
+| Xiaomi / MIUI / HyperOS | `/connectivity-check.html` | 302 Redirect |
+| Vivo / Funtouch | `/checklink` | 302 Redirect |
+| Windows NCSI | `/ncsi.txt`, `/connecttest.txt` | Non-matching body |
+| RFC 8908 (CAPPORT API) | `/.well-known/captiveportal/api` | JSON `captive: true` |
+| Amazon Kindle | `/kindle-wifi/wifistub.html` | Portal page |
+
+> **Modern devices (Android 14+, One UI 6+, iOS 16+):** Port 443 is rejected with a TCP Reset so HTTPS-first probes fail fast and immediately fall back to the HTTP portal. DHCP option 114 (CAPPORT API) is only advertised when a valid public HTTPS tunnel (cloudflared) is active.
 
 ---
 
@@ -131,4 +172,4 @@ Released under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for t
 ## Credits
 
 - **Deportal2**: [CDFER/Captive-Portal-ESP32](https://github.com/CDFER/Captive-Portal-ESP32)
-- **ESP32-Deauther**: [tesa-klebeband/ESP32-Deauther](https://github.com/tesa-klebeband/ESP32-Deauther)
+- **ESP32-Deauther**: [tesa-klebeband/ESP32-Deauther](https://github.com/tesa-klebeband/ESP32-Deauther)
