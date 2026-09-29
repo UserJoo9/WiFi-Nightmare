@@ -4,6 +4,29 @@ All notable changes to WiFi-Nightmare will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.1.2] - 2026-09-29
+
+### Added
+- **Aircrack-ng wordlist cracking** (Option 9 in target menu) — crack a captured handshake directly from the target menu with a custom wordlist; live output streamed to terminal, result saved to `cracked.txt`
+- **Captive portal detection for Oppo/ColorOS** — added `/mobile/status.php` and `/status.php` probe paths
+- **Captive portal detection for Xiaomi/MIUI/HyperOS** — added `/connectivity-check.html` probe path
+- **Captive portal detection for Vivo/Funtouch** — added `/checklink` probe path
+
+### Fixed
+- **Captive portal not triggering on modern devices** (Android 14/15, Samsung One UI 6/7, iOS, ColorOS)
+  - Disabled DHCP Option 114 when no valid HTTPS tunnel is available (plain `http://` URL in option 114 suppresses Android 11+ captive-portal detection)
+  - Port 443 now rejected with TCP Reset via iptables (`FORWARD` + `INPUT` chains) so HTTPS-first probes fail fast and immediately fall back to HTTP port 80
+  - All OS probe endpoints (Android, Apple, Samsung, Windows, Kindle) now respond with `302 Found` + `Location` header instead of a plain `200 OK` page
+- **Captive portal reporting password incorrect when it is correct** — removed `-b` / `-e` filters from `aircrack-ng` verification call; ESSID exact-match was silently zeroing the handshake on hidden networks and SSIDs with unusual characters or whitespace
+- **Deauth not working with single-card setup (TL-WN722N v1 / Atheros AR9271)**
+  - `_create_ap_interface()` now creates a dedicated AP interface (`wlan0_ap`) and a simultaneous monitor interface (`wlan0mon`) on the same physical chip via `iw phy … interface add`
+  - Fallback path: convert base interface to `__ap` mode then add a virtual monitor interface
+  - Second fallback: `airmon-ng start` for non-mac80211 drivers
+  - `_cleanup()` removes both virtual interfaces and restores the card to managed mode cleanly
+- **Hidden SSID not remembered after reveal** — `_refresh_ssid_from_db()` now syncs the live scan table from the database on every menu iteration so the revealed name persists without waiting for a new beacon
+- **BSSID fully shown in Deauth output and other options** — `mask_bssid()` applied consistently across all print statements in `main.py`, `ui.py`, `scanner.py`, and attack modules; deauth summary and all attack logs now show masked form only
+- **Spaces stripped from captured Evil Twin passwords** — password is preserved exactly as typed (only `\r\n` stripped, not leading/trailing spaces which are valid WPA passphrase characters)
+
 ## [2.1.1] - 2026-08-07
 
 ### Added

@@ -3,6 +3,9 @@
 import sys
 import time
 import os
+import re
+import shutil
+import subprocess
 import threading
 from scapy.all import sniff, Dot11, EAPOL
 
@@ -224,11 +227,13 @@ class WifiGTR:
             return
 
         try:
-            from evil_twin_software import SoftwareEvilTwin
+            from evil_twin_software import SoftwareEvilTwin, preflight_cloudflared
         except ImportError:
             print(f"{C_RED}[!] Software Evil Twin module not found.{C_RESET}")
             input("Press Enter...")
             return
+
+        cloudflared_bin = preflight_cloudflared()
 
         print(f"\n{C_CYAN}[*] Checking for existing Handshake...{C_RESET}")
         info = self.db.get_info(bssid)
@@ -297,7 +302,8 @@ class WifiGTR:
             target_channel=channel,
             target_ssid=ssid,
             db_handler=self.db,
-            portal_html=portal_html
+            portal_html=portal_html,
+            cloudflared_bin=cloudflared_bin
         )
         et.run()
         input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
@@ -318,6 +324,39 @@ class WifiGTR:
         
         print(f"{C_YELLOW}[*] Exiting.{C_RESET}")
 
+    def _refresh_ssid_from_db(self, bssid):
+        """Carry a decloaked SSID from the database into the live scan entry
+        and return the current display name.
+
+        The reveal flow only writes the name to the DB (handshake.py saves it
+        on the frame that decloaks the network); the scan-table entry stays
+        '<HIDDEN>' until a fresh beacon comes in. This refreshes it right away
+        so the target menu and following actions use the revealed name instead
+        of re-showing '<HIDDEN>' while still remembering it (it is also picked
+        up again on every later scan through the DB merge in scanner.py).
+        """
+        net_info = self.scanner.networks.get(bssid)
+        if net_info is None:
+            return "Unknown"
+
+        db_info = self.db.get_info(bssid)
+        if isinstance(db_info, dict):
+            saved = str(db_info.get('SSID', '') or '')
+        elif db_info:
+            saved = str(db_info)
+        else:
+            saved = ""
+
+        current = net_info.get('SSID', '')
+        if (saved and saved not in ("<HIDDEN>", "Unknown")
+                and current in ("<HIDDEN>", "Unknown", "")):
+            with self.scanner.lock:
+                net_info['SSID'] = saved
+                net_info['Hidden'] = False
+                net_info['Known'] = True
+            return saved
+        return current
+
     def scan_workflow(self):
         self.interface = utils.enable_monitor_mode(self.interface)
         utils.run_command(["ip", "link", "set", self.interface, "up"])
@@ -333,10 +372,12 @@ class WifiGTR:
 
         bssid, channel = target
         net_info = self.scanner.networks[bssid]
-        ssid_name = net_info['SSID']
-        client_count = len(net_info.get('Clients', []))
 
         while True:
+            # Refresh the name every iteration: a Reveal/attack may have just
+            # decloaked this hidden network and saved the SSID to the DB.
+            ssid_name = self._refresh_ssid_from_db(bssid)
+            client_count = len(self.scanner.networks[bssid].get('Clients', []))
             ui.print_target_menu(ssid_name, bssid, channel, client_count)
             
             # Option 6: ESP Evil Twin
@@ -362,6 +403,9 @@ class WifiGTR:
                     print(f"{C_YELLOW}[8] Pixie Dust — Module not loaded{C_RESET}")
             else:
                 print(f"{C_GREY}[8] Pixie Dust — WPS not detected{C_RESET}")
+
+            # Option 9: Offline wordlist crack (no external shell needed)
+            print(f"{C_WHITE}[9] Crack Handshake (aircrack-ng + Wordlist){C_RESET}")
 
             print(f"{C_CYAN}-{'-'*24}{C_RESET}")
             print(f"{C_WHITE}[0] Back to Scan{C_RESET}")
@@ -406,6 +450,8 @@ class WifiGTR:
                         if confirm != 'y':
                             continue
                     self.run_pixie_dust_workflow(bssid, channel, ssid_name)
+            elif action == '9': # Crack with aircrack-ng
+                self.run_aircrack_crack(bssid, ssid_name)
             elif action == '0':
                 break
             else:
@@ -648,7 +694,7 @@ class WifiGTR:
         
         msg = f"Mode: {mode.upper()}"
         print(f"{C_RED}[*] Starting: {msg} (Ctrl+C to Stop)...{C_RESET}")
-        logger.info(f"Starting attack on {bssid} ({mode})")
+        logger.info(f"Starting attack on {utils.mask_bssid(bssid)} ({mode})")
         
         with utils.SignalManager() as sig:
             # Start deauth thread for appropriate modes
@@ -772,7 +818,7 @@ class WifiGTR:
             f_type = "PMKID" if attacker.pmkid_captured else "Handshake"
             self.db.update_handshake(bssid, True, utils.get_current_time_12h(), filename=attacker.handshake_filename)
             
-            logger.info(f"{f_type} captured for {bssid}")
+            logger.info(f"{f_type} captured for {utils.mask_bssid(bssid)}")
             print(f"\n{C_CYAN}[+] {f_type} Captured!{C_RESET}")
             print(f"    Saved to: {attacker.handshake_filename}")
             
@@ -819,14 +865,120 @@ class WifiGTR:
                     input("Enter...")
                     return
                 pwd = input(f"[?] Password for {data['SSID']}: ").strip()
-                if utils.verify_password(pcap, bssid, data['SSID'], pwd):
+                result = utils.verify_password(pcap, bssid, data['SSID'], pwd)
+                if result is True:
                     print(f"\n{C_GREEN}[SUCCESS] Correct Password!{C_RESET}")
+                elif result is None:
+                    print(f"\n{C_RED}[!] No usable handshake in the capture.{C_RESET}")
+                    print(f"{C_YELLOW}    Cannot verify — re-capture the handshake first.{C_RESET}")
                 else:
                     print(f"\n{C_RED}[FAILURE] Incorrect.{C_RESET}")
                 input("Enter...")
         else:
             print(f"{C_RED}[!] Invalid ID.{C_RESET}")
             time.sleep(1)
+
+    def run_aircrack_crack(self, bssid, ssid):
+        """Directly crack a captured handshake with aircrack-ng + a wordlist,
+        without leaving the tool."""
+        info = self.db.get_info(bssid)
+        if not (info and info.get('HSFile') and os.path.exists(info['HSFile'])):
+            print(f"\n{C_RED}[!] No handshake for this target. Capture one first (Option 1).{C_RESET}")
+            input("\nPress Enter...")
+            return
+
+        if not shutil.which("aircrack-ng"):
+            print(f"\n{C_RED}[!] aircrack-ng not found. Install: sudo apt install aircrack-ng{C_RESET}")
+            input("\nPress Enter...")
+            return
+
+        pcap = info['HSFile']
+        print(f"\n{C_CYAN}[*] Handshake: {pcap}{C_RESET}")
+        print(f"{C_CYAN}[*] Target   : {ssid} ({utils.mask_bssid(bssid)}){C_RESET}")
+
+        wordlist = input(f"{C_YELLOW}[?]{C_RESET} Wordlist path: ").strip()
+        wordlist = os.path.expanduser(wordlist)
+        if not wordlist:
+            print(f"{C_RED}[!] Aborted.{C_RESET}")
+            return
+        if not os.path.isfile(wordlist):
+            print(f"{C_RED}[!] Wordlist not found: {wordlist}{C_RESET}")
+            return
+        if os.path.getsize(wordlist) == 0:
+            print(f"{C_RED}[!] Wordlist is empty.{C_RESET}")
+            return
+
+        # `-b` targets the right AP. We deliberately skip `-e`: the exact
+        # ESSID string match can silently zero-out the handshake on unusual
+        # SSIDs (hidden networks, case/whitespace mismatches).
+        cmd = ["aircrack-ng", "-a", "2", "-b", bssid, "-w", wordlist, pcap]
+        # Show the command with the full BSSID scrubbed from the display only —
+        # the executed command still targets the real AP.
+        print(f"\n{C_YELLOW}[*] Running: {utils.scrub_bssid(' '.join(cmd), bssid)}{C_RESET}")
+        print(f"{C_YELLOW}[*] Ctrl+C to stop...{C_RESET}\n")
+
+        password = None
+        saw_not_in_wordlist = False
+        saw_no_handshake = False
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL
+            )
+            # Stream raw output live (keeps aircrack-ng's progress bar with
+            # \r updates visible), and scan completed lines for the verdict.
+            buf = b""
+            while True:
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                sys.stdout.write(chunk.decode(errors="replace"))
+                sys.stdout.flush()
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    text = line.decode(errors="replace")
+                    if "KEY FOUND!" in text:
+                        m = re.search(r"KEY FOUND!\s*\[\s*([^\]\r\n]+?)\s*\]", text)
+                        if m:
+                            password = m.group(1).strip()
+                    elif "Passphrase not in dictionary" in text:
+                        saw_not_in_wordlist = True
+                    elif "No valid WPA handshakes" in text or re.search(r"\b0\s+handshake", text):
+                        saw_no_handshake = True
+            proc.wait()
+        except KeyboardInterrupt:
+            print(f"\n\n{C_RED}[!] Cracking stopped by user.{C_RESET}")
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                proc.wait()
+            input("\nPress Enter...")
+            return
+        except Exception as e:
+            print(f"\n{C_RED}[!] Error running aircrack-ng: {e}{C_RESET}")
+            input("\nPress Enter...")
+            return
+
+        if password:
+            print(f"\n{C_GREEN}[+] PASSWORD FOUND: {C_WHITE}{password}{C_RESET}")
+            with open("cracked.txt", "a") as f:
+                ts = time.strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{ts}] SSID: {ssid} | MAC: {utils.mask_bssid(bssid)} | Password: {password}\n")
+            print(f"{C_GREEN}    Saved to cracked.txt{C_RESET}")
+        elif saw_no_handshake:
+            print(f"\n{C_RED}[!] No valid WPA handshake in the capture.{C_RESET}")
+            print(f"{C_YELLOW}    Re-capture the handshake first (Option 1), then crack again.{C_RESET}")
+        elif saw_not_in_wordlist:
+            print(f"\n{C_YELLOW}[-] Dictionary exhausted - password not in the wordlist.{C_RESET}")
+        else:
+            print(f"\n{C_YELLOW}[-] Finished - password not found.{C_RESET}")
+
+        input("\nPress Enter...")
 
     def custom_portal_workflow(self):
         has_esp = self.esp_driver and self.esp_driver.is_connected
@@ -939,8 +1091,9 @@ def entry_point():
         print(f"{C_YELLOW}ESP Flash:{C_RESET} sudo wifi-nightmare flash-esp <port> [--board esp32|esp8266]")
         sys.exit(1)
 
-    from wifi_nightmare.dep_check import check_dependencies
+    from wifi_nightmare.dep_check import check_dependencies, check_cloudflared
     check_dependencies()
+    check_cloudflared()
 
     port = sys.argv[2] if len(sys.argv) == 3 else None
 

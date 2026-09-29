@@ -52,7 +52,7 @@ class ESP32Driver:
             if self.is_connected:
                 try:
                     if self.ser and self.ser.in_waiting > 0:
-                        line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                        line = self.ser.readline().decode('utf-8', errors='ignore').rstrip("\r\n")
                         if line:
                             self._process_line(line)
                     else:
@@ -86,9 +86,11 @@ class ESP32Driver:
         try:
             if "[CAPTURED]" in line:
                 # [CAPTURED] mypassword123
+                # Keep the password verbatim — a WPA passphrase may end or
+                # start with a space; only drop stray CR/LF from the serial line.
                 parts = line.split(" ", 1)
                 if len(parts) > 1:
-                    self.captured_password = parts[1].strip()
+                    self.captured_password = parts[1].rstrip("\r\n")
                     logger.info(f"ESP32 Captured Password: {self.captured_password}")
                     print(f"\n{C_GREEN}[!] CAPTURED DATA: {self.captured_password}{C_RESET}")
             

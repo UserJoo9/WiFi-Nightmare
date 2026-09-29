@@ -179,13 +179,16 @@ void setupServer()
         else if (verification_status == 3) statusMsg = "NO";
         request->send(200, "text/plain", statusMsg); });
 
-    // CAPPORT API (RFC 8908) — Android 12+ captive portal API
-    server.on("/.well-known/captiveportal/check", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->send(200, "application/json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\"}"); });
-    server.on("/.well-known/capport", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->send(200, "application/json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\"}"); });
-    server.on("/.well-known/captiveportal", HTTP_ANY, [](AsyncWebServerRequest *request)
-              { request->send(200, "application/json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\"}"); });
+    // CAPPORT API (RFC 8908) — Android 11+ (Samsung One UI 3+) / Chrome
+    // "application/captive+json" + "captive":true makes the OS skip its flaky
+    // HTTP/HTTPS probes and show the sign-in notification immediately.
+    auto serveCapport = [](AsyncWebServerRequest *request)
+    { request->send(200, "application/captive+json", "{\"captive\":true,\"user-portal-url\":\"http://4.3.2.1/\",\"venue-info-url\":\"\",\"captive-api\":\"http://4.3.2.1/.well-known/captiveportal/check\"}"); };
+
+    server.on("/.well-known/captiveportal/api", HTTP_ANY, serveCapport);
+    server.on("/.well-known/captiveportal/check", HTTP_ANY, serveCapport);
+    server.on("/.well-known/capport", HTTP_ANY, serveCapport);
+    server.on("/.well-known/captiveportal", HTTP_ANY, serveCapport);
 
     // Catch-all: serve portal HTML (not redirect) for Samsung compatibility
     server.onNotFound(servePortal);

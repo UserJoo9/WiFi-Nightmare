@@ -270,65 +270,78 @@ class SignalManager:
 def verify_password(pcap_file, bssid, ssid, password):
     """
     Verify password against captured handshake using aircrack-ng
-    
+
     Args:
         pcap_file: Path to the PCAP file containing the handshake
         bssid: Target BSSID (MAC address)
         ssid: Target SSID (network name)
         password: Password to verify
-        
+
     Returns:
-        bool: True if password is correct, False otherwise
+        True:  password is correct
+        False: password is wrong (handshake was verifiable)
+        None:  could not verify (no usable handshake in the capture)
     """
     if not os.path.exists(pcap_file):
         logger.warning(f"PCAP file not found: {pcap_file}")
         print(f"{C_RED}[!] Error: Pcap file not found.{C_RESET}")
-        return False
-    
-    # Write password to temporary file
+        return None
+
+    # Write password to temporary file (trailing newline so aircrack-ng
+    # reads it as a complete dictionary line).
     temp_pass_file = "temp_pass.txt"
     try:
         with open(temp_pass_file, 'w') as f:
-            f.write(password)
-        
+            f.write(password + "\n")
+
         print(f"{C_CYAN}    [Cracker] Target: {ssid} ({mask_bssid(bssid)}) | Pass: {password}{C_RESET}")
-        
-        # Build aircrack-ng command with BSSID and SSID for precise targeting
+
+        # Deliberately NO `-b` / `-e` filters: the capture is already
+        # BSSID-filtered by airodump-ng, so it contains only one AP at
+        # most. Filtering by ESSID (`-e`) is an exact string match against
+        # the EAPOL bytes in the pcap, and ANY discrepancy (case, trailing
+        # spaces, non-ASCII, hidden networks with an empty ESSID) makes
+        # aircrack-ng report "0 handshake" — we'd then declare the correct
+        # password as WRONG. Same reasoning as capture_native._analyze_capture.
         cmd = [
             "aircrack-ng",
-            "-a", "2",              # WPA2
+            "-a", "2",              # WPA/WPA2
             "-w", temp_pass_file,   # Password file
-            "-b", bssid,            # BSSID (critical)
-            "-e", ssid,             # SSID (critical)
             pcap_file               # Capture file
         ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True, text=True, timeout=60,
+            stdin=subprocess.DEVNULL
+        )
         output = result.stdout
-        
-        if "KEY FOUND!" in output:
+        out_lower = output.lower()
+
+        if "key found!" in out_lower:
             return True
-        else:
-            # Detailed failure analysis
-            print(f"{C_RED}    [Debug] Aircrack Failed. Analysis:{C_RESET}")
-            
-            if "Passphrase not in dictionary" in output:
-                # Handshake is valid, but password is wrong
-                print(f"{C_YELLOW}    >>> Result: Wrong Password (Handshake is Valid).{C_RESET}")
-            elif "No valid WPA handshakes" in output:
-                # No handshake found for this BSSID
-                print(f"{C_RED}    >>> Result: No handshake found for BSSID {mask_bssid(bssid)}.{C_RESET}")
-                print(f"    >>> Full Output:\n{output}")
-            else:
-                # Other error
-                print(f"    >>> Unknown Error. Aircrack Output:\n{output}")
-        
-        return False
-        
+
+        # Did aircrack-ng actually see a usable handshake in this capture?
+        m = re.search(r'(\d+)\s+handshake', out_lower)
+        handshake_count = int(m.group(1)) if m else 0
+        if handshake_count >= 1 and "no valid wpa handshakes" not in out_lower:
+            # Handshake is valid, but the candidate was checked and failed.
+            print(f"{C_YELLOW}    >>> Result: Wrong Password (Handshake is Valid).{C_RESET}")
+            return False
+
+        # No usable handshake -> we cannot tell right from wrong.
+        print(f"{C_RED}    >>> No usable handshake found in the capture. Cannot verify.{C_RESET}")
+        print(f"    >>> Full Output:\n{output}")
+        return None
+
+    except subprocess.TimeoutExpired:
+        logger.error("aircrack-ng timed out during password verification")
+        print(f"{C_RED}    [!] aircrack-ng timed out while verifying.{C_RESET}")
+        return None
     except Exception as e:
         logger.error(f"Error verifying password with aircrack: {e}")
         print(f"{C_RED}    [!] Execution Error: {e}{C_RESET}")
-        return False
+        return None
     finally:
         # Cleanup temporary file
         if os.path.exists(temp_pass_file):

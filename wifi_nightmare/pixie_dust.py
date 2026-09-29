@@ -433,5 +433,5 @@ class PixieDustAttack:
                 except Exception:
                     pass
 
-        logger.info(f"Pixie Dust failed for {self.target_bssid}")
+        logger.info(f"Pixie Dust failed for {mask_bssid(self.target_bssid)}")
         return None

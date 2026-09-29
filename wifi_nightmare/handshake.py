@@ -9,7 +9,7 @@ from scapy.all import (
 )
 from wifi_nightmare.deauth import BaseAttacker
 from wifi_nightmare.config import HANDSHAKES_DIR, C_GREEN, C_RED, C_YELLOW, C_CYAN, C_RESET
-from wifi_nightmare.utils import get_vendor, get_current_time_12h, mask_bssid_filename, safe_ssid as sanitize_ssid
+from wifi_nightmare.utils import get_vendor, get_current_time_12h, mask_bssid, mask_bssid_filename, safe_ssid as sanitize_ssid
 from wifi_nightmare.logger import logger
 
 
@@ -283,7 +283,7 @@ class NetworkAttacker(BaseAttacker):
                     self.stop_attack = True
                 print(f"{C_GREEN}[+] VALID HANDSHAKE CONFIRMED!{C_RESET}")
                 print(f"{C_GREEN}    File: {full_path}{C_RESET}")
-                logger.info(f"Valid handshake confirmed for {self.target_bssid}")
+                logger.info(f"Valid handshake confirmed for {mask_bssid(self.target_bssid)}")
             else:
                 print(f"{C_RED}[-] Handshake verification failed{C_RESET}")
                 if "no networks found" in proc.stdout.lower():

@@ -4,7 +4,7 @@ build-backend = "setuptools.backends._legacy:_Backend"
 
 [project]
 name = "wifi-nightmare"
-version = "2.1.1"
+version = "2.1.2"
 description = "Advanced WiFi Security Auditing and Penetration Testing Framework"
 readme = "README.md"
 license = {text = "MIT"}

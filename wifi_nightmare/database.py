@@ -10,6 +10,7 @@ except ImportError:
 
 from wifi_nightmare.config import DB_FILE, C_RED, C_RESET
 from wifi_nightmare.logger import logger
+from wifi_nightmare.utils import mask_bssid
 
 class DatabaseHandler:
     def __init__(self):
@@ -62,7 +63,7 @@ class DatabaseHandler:
 
     def save(self, bssid, ssid):
         if not self._validate_bssid(bssid):
-            logger.warning(f"Invalid BSSID format ignored: {bssid}")
+            logger.warning(f"Invalid BSSID format ignored: {mask_bssid(bssid)}")
             return
             
         bssid_key = bssid.lower()
