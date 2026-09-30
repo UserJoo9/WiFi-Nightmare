@@ -28,9 +28,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Extract the matching section from CHANGELOG.md
+          # Tag is "v2.1.2", section header is "## [2.1.2]"
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+
+          if [ -z "$NOTES" ]; then
+            NOTES="Release ${GITHUB_REF_NAME}"
+          fi
+
+          # Delete any existing release from a previous run to avoid conflicts
+          gh release delete "$GITHUB_REF_NAME" --yes 2>/dev/null || true
+
           gh release create "$GITHUB_REF_NAME" \
-            --title "WiFi-Nightmare $GITHUB_REF_NAME" \
-            --notes "Automated build of WiFi-Nightmare $GITHUB_REF_NAME" \
+            --title "WiFi-Nightmare ${GITHUB_REF_NAME}" \
+            --notes "$NOTES" \
             ../wifi-nightmare_*.deb
 
       - name: Update APT repository on gh-pages

@@ -1,3 +1,18 @@
+wifi-nightmare (2.1.2) unstable; urgency=medium
+
+  * Captive portal now triggers on Android 14/15, Samsung One UI 6/7, iOS, ColorOS, Xiaomi MIUI, Vivo Funtouch.
+  * Disabled DHCP option 114 when no valid HTTPS tunnel (cloudflared) is active.
+  * Port 443 rejected with TCP Reset so HTTPS-first probes fall back to HTTP immediately.
+  * All OS probe paths (Android, Apple, Samsung, Oppo, Xiaomi, Vivo) respond with 302 Found + Location header.
+  * Fixed captive portal incorrectly rejecting correct passwords: removed -b/-e ESSID filters from aircrack-ng verify.
+  * Fixed deauth failing with single-card setup (TL-WN722N v1 / Atheros AR9271): VIF AP + monitor interfaces created simultaneously.
+  * Fixed hidden SSID not persisting in menu after reveal.
+  * Fixed BSSID fully displayed in Deauth and other outputs.
+  * Fixed Evil Twin password capture stripping leading/trailing spaces.
+  * Added Option 9 in target menu: crack handshake with aircrack-ng + wordlist (live output, saves to cracked.txt).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Tue, 29 Sep 2026 13:35:00 +0000
+
 wifi-nightmare (2.1.1) unstable; urgency=medium
 
   * BSSID masking for privacy: all BSSIDs shown as first/last octet only across the TUI and exported files.
