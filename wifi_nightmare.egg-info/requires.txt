@@ -1,0 +1,4 @@
+PyYAML==6.0.3
+esptool>=4.0
+pyserial==3.5
+scapy==2.7.0

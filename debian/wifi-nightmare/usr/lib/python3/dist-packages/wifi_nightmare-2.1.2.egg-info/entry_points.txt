@@ -1,0 +1,2 @@
+[console_scripts]
+wifi-nightmare = wifi_nightmare.main:entry_point

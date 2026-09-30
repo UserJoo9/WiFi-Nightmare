@@ -1,0 +1,199 @@
+Metadata-Version: 2.1
+Name: wifi-nightmare
+Version: 2.1.2
+Summary: Advanced WiFi Security Auditing and Penetration Testing Framework
+Author: Youssef Alkhodary
+License: MIT
+Project-URL: Homepage, https://github.com/YoussefAlkhodary/WiFi-Nightmare
+Project-URL: Repository, https://github.com/YoussefAlkhodary/WiFi-Nightmare.git
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Security
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+# WiFi-Nightmare
+
+**v2.1.2** — Advanced WiFi security auditing and penetration testing tool.
+
+Combines a Python CLI with optional ESP32/ESP8266 firmware for Evil Twin, Deauthentication, Handshake capture, WPS Pixie Dust, and captive portal attacks.
+
+## Features
+
+- **Network Scanning** — Discover WiFi networks and connected clients
+- **Deauthentication Attacks** — scapy → mdk4 → aireplay-ng fallback chain
+- **Handshake Capture** — WPA/WPA2 handshakes + Hashcat `.hc22000` conversion
+- **Handshake Cracking** — Crack captured handshakes with aircrack-ng + any wordlist directly from the target menu
+- **SSID Reveal** — Decloak hidden networks (name is remembered across the session)
+- **Evil Twin (Software)** — Fake AP with captive portal using hostapd + dnsmasq — no ESP needed (requires VIF support)
+- **Evil Twin (ESP)** — Hardware-assisted Evil Twin via ESP32/ESP8266 over serial
+- **Captive Portal** — Auto-detection for all major OEMs: Apple iOS/macOS, Android (Google, Samsung One UI, Oppo/ColorOS, Xiaomi/MIUI, Vivo/Funtouch), Windows NCSI, Kindle
+- **Pixie Dust (WPS)** — WPS PIN recovery via reaver + pixiewps
+- **9 Branded Portal Templates** — TP-Link, Huawei, ZTE, D-Link, Tenda, Vodafone, Etisalat, WE, Orange
+- **Custom Portal** — Upload your own HTML without reflashing ESP
+- **Database** — Persistent JSON store for networks, handshakes, and WPS data
+- **BSSID Privacy** — All BSSIDs masked to `xx:xx:xx:xx` form in every log and output
+- **Mass Attack** — Automated deauth on multiple hidden networks
+
+---
+
+## Quick Install
+
+```bash
+curl -sSL https://userjoo9.github.io/WiFi-Nightmare/install.sh | sudo bash
+```
+
+Or manually:
+```bash
+sudo apt update && sudo apt install -y curl
+echo "deb [trusted=yes] https://userjoo9.github.io/WiFi-Nightmare stable main" | sudo tee /etc/apt/sources.list.d/wifi-nightmare.list
+sudo apt update && sudo apt install wifi-nightmare
+```
+
+### Update
+```bash
+sudo apt update && sudo apt upgrade wifi-nightmare
+```
+
+### Uninstall
+```bash
+sudo apt purge wifi-nightmare
+sudo rm -f /etc/apt/sources.list.d/wifi-nightmare.list /usr/share/keyrings/wifi-nightmare.gpg
+```
+
+---
+
+## Usage
+
+```bash
+sudo wifi-nightmare wlan0              # Standalone mode
+sudo wifi-nightmare wlan0 /dev/ttyUSB0 # With ESP module
+sudo wifi-nightmare flash-esp /dev/ttyUSB0 --board esp32  # Flash ESP firmware
+```
+
+- The tool detects your hardware at startup and shows only available attacks
+- No need to run `airmon-ng` — monitor mode is handled automatically
+- Find your interface: `iw dev`
+- Find your ESP port: `ls /dev/ttyUSB* /dev/ttyACM*`
+
+---
+
+## Target Menu Options
+
+Once you select a network, the target menu offers:
+
+| Option | Action | Requires |
+|--------|--------|----------|
+| `1` | Capture Handshake | Monitor + injection |
+| `2` | Reveal Hidden SSID | Monitor + injection |
+| `3` | Deauth Attack | Monitor + injection |
+| `4` | Passive Listen | Monitor |
+| `5` | Generate hc22000 | Captured handshake |
+| `6` | Evil Twin (ESP) | ESP connected |
+| `7` | Evil Twin (Software) | VIF + hostapd + dnsmasq |
+| `8` | Pixie Dust (WPS) | reaver + pixiewps |
+| `9` | **Crack Handshake (aircrack-ng + Wordlist)** | Captured handshake |
+
+---
+
+## Hardware Compatibility
+
+| Feature | Requires |
+|---------|----------|
+| Scanning / Deauth / Handshake | Monitor mode + packet injection |
+| Software Evil Twin | VIF support + hostapd + dnsmasq |
+| ESP Evil Twin | ESP32/ESP8266 over serial |
+| Pixie Dust (WPS) | reaver + pixiewps |
+
+### Adapter Compatibility Guide
+
+| Chipset | Example Adapter | Monitor | Injection | VIF / AP | Rating |
+|---------|----------------|:-------:|:---------:|:--------:|:------:|
+| **RTL8812AU** | Alfa AWUS036ACH | ✅ | ✅ | ✅ | ⭐ Full |
+| **RTL8814AU** | Alfa AWUS1900 | ✅ | ✅ | ✅ | ⭐ Full |
+| **RTL8821AU** | Comfast CF-912AC | ✅ | ✅ | ✅ | ⭐ Full |
+| **AR9271** | TP-Link TL-WN722N v1 | ✅ | ✅ | ✅ | ⭐ Full |
+| **RTL8187** | Alfa AWUS036H | ✅ | ✅ | ❌ | ⚡ Basic |
+| **RTL8188EU** | TP-Link TL-WN725N | ✅ | ✅ | ❌ | ⚡ Basic |
+
+🟢 **Full** = All features including Software Evil Twin (AP + monitor VIFs simultaneously)<br>
+⚡ **Basic** = Scanning, deauth, handshake, pixie dust — no Virtual AP
+
+> Built-in laptop WiFi cards usually **don't support monitor mode**. Get an external USB adapter. For full support, pick RTL8812AU (Alfa AWUS036ACH) or TL-WN722N v1 (AR9271).
+
+---
+
+## Captive Portal Support
+
+The software Evil Twin captive portal triggers automatically on:
+
+| OS / OEM | Probe Path | Method |
+|----------|-----------|--------|
+| Android / Google | `/generate_204`, `/gen_204` | 302 Redirect |
+| Samsung One UI | `/check_network_status.txt` | 302 Redirect |
+| Apple iOS / macOS | `/hotspot-detect.html` | 302 Redirect |
+| Oppo / ColorOS | `/mobile/status.php` | 302 Redirect |
+| Xiaomi / MIUI / HyperOS | `/connectivity-check.html` | 302 Redirect |
+| Vivo / Funtouch | `/checklink` | 302 Redirect |
+| Windows NCSI | `/ncsi.txt`, `/connecttest.txt` | Non-matching body |
+| RFC 8908 (CAPPORT API) | `/.well-known/captiveportal/api` | JSON `captive: true` |
+| Amazon Kindle | `/kindle-wifi/wifistub.html` | Portal page |
+
+> **Modern devices (Android 14+, One UI 6+, iOS 16+):** Port 443 is rejected with a TCP Reset so HTTPS-first probes fail fast and immediately fall back to the HTTP portal. DHCP option 114 (CAPPORT API) is only advertised when a valid public HTTPS tunnel (cloudflared) is active.
+
+---
+
+## Development Setup
+
+```bash
+git clone https://github.com/UserJoo9/WiFi-Nightmare.git
+cd WiFi-Nightmare
+sudo apt-get install aircrack-ng hcxtools iw hostapd dnsmasq reaver pixiewps
+pip install -e .
+sudo wifi-nightmare wlan0
+```
+
+**Run tests:**
+```bash
+pip install pytest && python3 -m pytest tests/
+```
+
+---
+
+## Project Structure
+
+```
+WiFi-Nightmare/
+├── wifi_nightmare/         # Python package (CLI, attacks, ESP driver, UI)
+├── esp_firmware/           # Pre-compiled ESP32/ESP8266 firmware binaries
+├── ESP32-DePortal2/        # ESP32 firmware source (PlatformIO project)
+├── ESP8266-DePortal2/      # ESP8266 firmware source (PlatformIO project)
+├── debian/                 # Debian packaging files
+├── install.sh              # APT repo one-liner setup
+└── pyproject.toml          # Python build configuration
+```
+
+---
+
+## Disclaimer
+
+This tool is for **authorized security testing and educational purposes only**. Unauthorized access to computer networks is illegal. Always obtain explicit permission before testing.
+
+## License
+
+Released under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for the full text.
+
+## Credits
+
+- **Deportal2**: [CDFER/Captive-Portal-ESP32](https://github.com/CDFER/Captive-Portal-ESP32)
+- **ESP32-Deauther**: [tesa-klebeband/ESP32-Deauther](https://github.com/tesa-klebeband/ESP32-Deauther)
