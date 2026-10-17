@@ -495,7 +495,7 @@ class WifiGTR:
         return current
 
     def scan_workflow(self):
-        self.interface = utils.enable_monitor_mode(self.interface)
+        # Monitor mode is already enabled in start() — just ensure the interface is up
         utils.run_command(["ip", "link", "set", self.interface, "up"])
         
         self.run_scanner_process()
