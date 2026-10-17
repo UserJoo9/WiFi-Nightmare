@@ -1,15 +1,6 @@
 # Changelog
 
-## [3.0.1] - 2026-10-17 — Monitor Mode Fix 🔧
-
-### Bug fixes
-- **Monitor mode now uses `airmon-ng` as the primary method** — the old manual `iw` approach caused some wireless adapters to freeze or fail to detect any networks; `airmon-ng start` handles adapter quirks automatically and creates a clean monitor-mode interface (e.g. `wlan0mon`)
-- **Automatic interface name detection** — the tool now parses `airmon-ng` output to find the new interface name instead of assuming it stays the same
-- **Smart fallback** — if `airmon-ng` is not installed, the tool falls back to the manual `iw` method automatically with a clear warning message
-
----
-
-## [3.0.0] - 2026-10-06 — The Giant Update 🚀
+## [3.0.0] - 2026-10-17 — The Giant Update 🚀
 
 ### What's new
 - **PMKID Attack (Option 11)** — Clientless WPA2 hash harvesting from EAPOL Association frames without requiring clients or sending deauth. Formatted directly for Hashcat mode 22000 (`.hc22000`).
@@ -27,6 +18,11 @@
 - **Multi-Card Aggregation Engine** — Automatically detects and coordinates dual physical adapters: assigns a **Dedicated Sniffer** (zero packet loss on handshake capture) and a **Dedicated Injector** (continuous deauth/CSA injection).
 - **Dual-Band Scanning (2.4 GHz + 5 GHz)** — Live scanner now hops across 2.4 GHz (1-13) and 5 GHz channels (36-161) simultaneously.
 - **WPA3 & PMF Detection in Live Scanner** — Scanner parses RSN Capabilities to identify WPA3/SAE networks and Protected Management Frames (marked as `WPA3/WPA2+PMF`).
+
+### Bug fixes
+- **Monitor mode now uses `airmon-ng` as the primary method** — the old manual `iw` approach caused some wireless adapters to freeze or fail to detect networks; `airmon-ng start` handles adapter quirks automatically and creates a clean monitor-mode interface (e.g. `wlan0mon`)
+- **Automatic interface name detection** — the tool now parses `airmon-ng` output to find the exact new interface name instead of assuming it stays the same
+- **Smart fallback** — if `airmon-ng` is not installed, falls back to manual `iw` method automatically with a clear warning message
 
 ---
 
