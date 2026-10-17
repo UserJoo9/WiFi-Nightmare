@@ -1,25 +1,24 @@
 # WiFi-Nightmare
 
-**v2.1.2** — Advanced WiFi security auditing and penetration testing tool.
+**v3.0.0** — Advanced WiFi security auditing, multi-vector eviction, and penetration testing suite.
 
-Combines a Python CLI with optional ESP32/ESP8266 firmware for Evil Twin, Deauthentication, Handshake capture, WPS Pixie Dust, and captive portal attacks.
+Combines modern 802.11 attack vectors (CSA/BTM eviction, WPS Push-Button sniffing, multi-card coordination) with an enterprise Captive Portal engine and optional ESP32/ESP8266 hardware acceleration.
 
-## Features
+## What's New in v3.0
 
-- **Network Scanning** — Discover WiFi networks and connected clients
-- **Deauthentication Attacks** — scapy → mdk4 → aireplay-ng fallback chain
-- **Handshake Capture** — WPA/WPA2 handshakes + Hashcat `.hc22000` conversion
-- **Handshake Cracking** — Crack captured handshakes with aircrack-ng + any wordlist directly from the target menu
-- **SSID Reveal** — Decloak hidden networks (name is remembered across the session)
-- **Evil Twin (Software)** — Fake AP with captive portal using hostapd + dnsmasq — no ESP needed (requires VIF support)
-- **Evil Twin (ESP)** — Hardware-assisted Evil Twin via ESP32/ESP8266 over serial
-- **Captive Portal** — Auto-detection for all major OEMs: Apple iOS/macOS, Android (Google, Samsung One UI, Oppo/ColorOS, Xiaomi/MIUI, Vivo/Funtouch), Windows NCSI, Kindle
-- **Pixie Dust (WPS)** — WPS PIN recovery via reaver + pixiewps
-- **9 Branded Portal Templates** — TP-Link, Huawei, ZTE, D-Link, Tenda, Vodafone, Etisalat, WE, Orange
-- **Custom Portal** — Upload your own HTML without reflashing ESP
-- **Database** — Persistent JSON store for networks, handshakes, and WPS data
-- **BSSID Privacy** — All BSSIDs masked to `xx:xx:xx:xx` form in every log and output
-- **Mass Attack** — Automated deauth on multiple hidden networks
+- **PMKID Attack (Clientless WPA2)** — Active harvesting of PMKID hashes directly from AP Association frames without waiting for connected clients or sending deauth frames.
+- **Karma Attack** — Automatically responds to device 802.11 Probe Requests to lure surrounding devices into connecting automatically.
+- **Beacon Flooding** — High-speed transmission of thousands of fake AP beacons with common SSIDs or cloned target SSIDs.
+- **WPA-Enterprise Fake RADIUS** — Harvests 802.1X corporate credentials (PEAP/TTLS) via an embedded rogue RADIUS authentication server.
+- **Smart Wordlists & Auto-Rockyou** — Dynamic SSID-pattern password candidates, MENA/ISP vendor defaults (WE, Vodafone, Orange, Etisalat), and automatic rockyou.txt retrieval.
+- **Session Export (JSON / CSV / Reports)** — Complete structured reporting and database export for post-engagement audits.
+- **Rich TUI Live Dashboard** — High-resolution terminal visualization with RSSI signal bars, color-coded security badges, and live event monitoring.
+- **Geo-Location BSSID Lookup** — Query physical coordinates and map URLs using Wigle.net and OpenWifi APIs.
+- **Multi-Vector Eviction (Deauth + CSA + BTM)** — Bypasses 802.11w PMF (Protected Management Frames) by injecting Channel Switch Announcements (IE 37) and 802.11v BTM frames.
+- **WPS Push-Button (PBC) Sniffer** — Automatically detects when someone presses the physical WPS button on the router and extracts plaintext credentials instantly.
+- **Algorithmic Known-PINs** — Built-in generators for ComputePIN, D-Link, and EasyBox default PIN algorithms.
+- **Multi-Card Aggregation Engine** — Automatic detection and coordination of dual adapters (Dedicated Sniffer + Dedicated Injector).
+- **Enterprise Captive Portal (RFC 8908)** — Bypass CNA on modern devices (Samsung One UI, iOS 18, ColorOS, MIUI) with HTTPS Cloudflare tunnels.
 
 ---
 
@@ -70,15 +69,21 @@ Once you select a network, the target menu offers:
 
 | Option | Action | Requires |
 |--------|--------|----------|
-| `1` | Capture Handshake | Monitor + injection |
+| `1` | Capture Handshake (WPA/WPA2/WPA3) | Monitor + injection |
 | `2` | Reveal Hidden SSID | Monitor + injection |
-| `3` | Deauth Attack | Monitor + injection |
+| `3` | Multi-Vector Eviction (Deauth + CSA + BTM) | Monitor + injection |
 | `4` | Passive Listen | Monitor |
 | `5` | Generate hc22000 | Captured handshake |
 | `6` | Evil Twin (ESP) | ESP connected |
 | `7` | Evil Twin (Software) | VIF + hostapd + dnsmasq |
-| `8` | Pixie Dust (WPS) | reaver + pixiewps |
-| `9` | **Crack Handshake (aircrack-ng + Wordlist)** | Captured handshake |
+| `8` | WPS Suite (Pixie Dust / Push-Button PBC / Known-PIN) | reaver / pixiewps |
+| `9` | Crack Handshake (aircrack-ng + Wordlist) | Captured handshake |
+| `10` | WPA3 Downgrade Attack (Clone AP + CSA Eviction) | Monitor + injection |
+| `11` | **PMKID Attack (Clientless WPA2 Harvesting)** | Monitor + injection |
+| `12` | **Karma Attack (Probe Request Responder)** | Monitor + injection |
+| `13` | **Beacon Flood (Clone / Common SSID Storm)** | Monitor + injection |
+| `14` | **WPA-Enterprise Evil Twin (Fake RADIUS Harvest)** | hostapd + openssl |
+| `15` | **Smart Crack (SSID-Smart Wordlist + Rockyou)** | Captured handshake |
 
 ---
 

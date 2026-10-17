@@ -3,10 +3,24 @@ import os
 import re
 import threading
 import subprocess
-from scapy.all import (
-    sniff, sendp, wrpcap, RadioTap, Dot11, Dot11Elt, Dot11ProbeReq,
-    Dot11Auth, Dot11AssoReq, EAPOL
-)
+try:
+    from scapy.all import (
+        sniff, sendp, wrpcap, RadioTap, Dot11, Dot11Elt, Dot11ProbeReq,
+        Dot11Auth, Dot11AssoReq, EAPOL
+    )
+    HAS_SCAPY = True
+except ImportError:
+    sniff = None
+    sendp = None
+    wrpcap = None
+    RadioTap = None
+    Dot11 = None
+    Dot11Elt = None
+    Dot11ProbeReq = None
+    Dot11Auth = None
+    Dot11AssoReq = None
+    EAPOL = None
+    HAS_SCAPY = False
 from wifi_nightmare.deauth import BaseAttacker
 from wifi_nightmare.config import HANDSHAKES_DIR, C_GREEN, C_RED, C_YELLOW, C_CYAN, C_RESET
 from wifi_nightmare.utils import get_vendor, get_current_time_12h, mask_bssid, mask_bssid_filename, safe_ssid as sanitize_ssid

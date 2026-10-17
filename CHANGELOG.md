@@ -1,5 +1,35 @@
 # Changelog
 
+## [3.0.1] - 2026-10-17 — Monitor Mode Fix 🔧
+
+### Bug fixes
+- **Monitor mode now uses `airmon-ng` as the primary method** — the old manual `iw` approach caused some wireless adapters to freeze or fail to detect any networks; `airmon-ng start` handles adapter quirks automatically and creates a clean monitor-mode interface (e.g. `wlan0mon`)
+- **Automatic interface name detection** — the tool now parses `airmon-ng` output to find the new interface name instead of assuming it stays the same
+- **Smart fallback** — if `airmon-ng` is not installed, the tool falls back to the manual `iw` method automatically with a clear warning message
+
+---
+
+## [3.0.0] - 2026-10-06 — The Giant Update 🚀
+
+### What's new
+- **PMKID Attack (Option 11)** — Clientless WPA2 hash harvesting from EAPOL Association frames without requiring clients or sending deauth. Formatted directly for Hashcat mode 22000 (`.hc22000`).
+- **Karma Attack (Option 12)** — Automatically sniffs 802.11 Probe Requests from nearby devices and responds with spoofed Probe Responses to attract clients seamlessly.
+- **Beacon Flooding (Option 13)** — Transmits high-frequency 802.11 Beacon storms with common SSIDs, cloned networks, or random SSIDs.
+- **WPA-Enterprise Fake RADIUS (Option 14)** — Launches a rogue 802.1X Access Point with an embedded fake UDP RADIUS server to harvest PEAP/TTLS credentials and challenge responses.
+- **Smart Wordlists & Auto-Rockyou (Option 15)** — Dynamic candidate generation tailored to the target SSID name/MAC, ISP default patterns for Egypt/MENA (WE, Vodafone, Orange, Etisalat), and automatic rockyou.txt download.
+- **Session Export (Main Menu Option 5)** — Exports complete recon and attack datasets to structured JSON, CSV spreadsheets, and clean human-readable reports.
+- **Rich TUI Live Dashboard** — Real-time terminal visualization using `rich` with RSSI signal bars, color-coded security badges, client badges, and event logging.
+- **Geo-Location BSSID Lookup (Main Menu Option 6)** — Resolves Access Point BSSIDs to physical latitude/longitude and Google Maps links via Wigle.net and OpenWifi APIs.
+- **Multi-Vector Eviction (Deauth + CSA + BTM)** — Bypasses 802.11w PMF (Protected Management Frames) by injecting Channel Switch Announcements (Element ID 37) and 802.11v BTM requests.
+- **WPA3/SAE Transition Downgrade Attack (Option 10)** — Forces clients connected to WPA3/WPA2 Transition networks to fall back to WPA2-PSK via CSA beacons, capturing crackable M2 4-way handshakes.
+- **WPS Push-Button (PBC) Sniffer** — Sniffs physical WPS button presses on the router to extract plaintext WPA-PSK credentials immediately without brute force or PIN cracking.
+- **Algorithmic Known-PINs Database** — Built-in offline mathematical generators for ComputePIN, D-Link, and EasyBox algorithms with standardized 8th-digit checksum validation.
+- **Multi-Card Aggregation Engine** — Automatically detects and coordinates dual physical adapters: assigns a **Dedicated Sniffer** (zero packet loss on handshake capture) and a **Dedicated Injector** (continuous deauth/CSA injection).
+- **Dual-Band Scanning (2.4 GHz + 5 GHz)** — Live scanner now hops across 2.4 GHz (1-13) and 5 GHz channels (36-161) simultaneously.
+- **WPA3 & PMF Detection in Live Scanner** — Scanner parses RSN Capabilities to identify WPA3/SAE networks and Protected Management Frames (marked as `WPA3/WPA2+PMF`).
+
+---
+
 ## [2.1.2] - 2026-09-29
 
 ### What's new

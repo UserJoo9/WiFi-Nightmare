@@ -3,7 +3,13 @@ import os
 import sys
 import threading
 import subprocess
-from scapy.all import sniff, Dot11
+try:
+    from scapy.all import sniff, Dot11
+    HAS_SCAPY = True
+except ImportError:
+    sniff = None
+    Dot11 = None
+    HAS_SCAPY = False
 from wifi_nightmare.deauth import BaseAttacker
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_RESET
 from wifi_nightmare.utils import run_command, verify_password, mask_bssid

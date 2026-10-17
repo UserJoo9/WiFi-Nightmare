@@ -13,14 +13,15 @@ from wifi_nightmare.logger import logger
 from wifi_nightmare.utils import mask_bssid
 
 class DatabaseHandler:
-    def __init__(self):
+    def __init__(self, db_file=None):
+        self.db_file = db_file or DB_FILE
         self.known_networks = {}
         self.load()
 
     def load(self):
-        if os.path.exists(DB_FILE):
+        if os.path.exists(self.db_file):
             try:
-                with open(DB_FILE, 'r') as f:
+                with open(self.db_file, 'r') as f:
                     # Shared lock for reading (Unix only)
                     if fcntl:
                         fcntl.flock(f.fileno(), fcntl.LOCK_SH)
@@ -98,7 +99,7 @@ class DatabaseHandler:
         self._write_to_file()
 
     def _write_to_file(self):
-        temp_file = DB_FILE + ".tmp"
+        temp_file = self.db_file + ".tmp"
         try:
             with open(temp_file, 'w') as f:
                 # Exclusive lock for writing (Unix only)
@@ -111,7 +112,7 @@ class DatabaseHandler:
                     fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             
             # Atomic move
-            shutil.move(temp_file, DB_FILE)
+            shutil.move(temp_file, self.db_file)
             
         except Exception as e:
             logger.error(f"DB Save Error: {e}")

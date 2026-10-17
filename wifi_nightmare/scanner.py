@@ -2,7 +2,16 @@
 import time
 import subprocess
 import threading
-from scapy.all import sniff, Dot11, Dot11Beacon, Dot11Elt, RadioTap
+try:
+    from scapy.all import sniff, Dot11, Dot11Beacon, Dot11Elt, RadioTap
+    HAS_SCAPY = True
+except ImportError:
+    sniff = None
+    Dot11 = None
+    Dot11Beacon = None
+    Dot11Elt = None
+    RadioTap = None
+    HAS_SCAPY = False
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET
 from wifi_nightmare.utils import get_vendor, mask_bssid
 from wifi_nightmare.logger import logger
@@ -16,17 +25,18 @@ class NetworkScanner:
         self.stop_sniffing = False
 
     def channel_hopper(self):
-        ch = 1
+        # 2.4 GHz (1-13) + common 5 GHz channels (36, 40, 44, 48, 149, 153, 157, 161)
+        channels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 36, 40, 44, 48, 149, 153, 157, 161]
+        idx = 0
         while not self.stop_sniffing:
             try:
-                # Use iw instead of iwconfig (faster)
+                ch = channels[idx]
                 subprocess.run(["iw", "dev", self.interface, "set", "channel", str(ch)], 
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                ch = ch + 1 if ch < 13 else 1
-                time.sleep(0.5)
+                idx = (idx + 1) % len(channels)
+                time.sleep(0.4)
             except Exception as e:
                 logger.debug(f"Channel hopping error: {e}")
-                # Don't break loop, retry
                 time.sleep(1)
 
     def packet_handler(self, pkt):
@@ -75,6 +85,32 @@ class NetworkScanner:
                             wps_elt = wps_elt.payload
                     except Exception:
                         pass
+
+                    # Check for WPA3 / SAE and PMF in RSN Element (ID 48)
+                    has_wpa3 = False
+                    has_pmf = False
+                    try:
+                        rsn_elt = pkt.getlayer(Dot11Elt)
+                        while rsn_elt:
+                            if rsn_elt.ID == 48:
+                                rsn_bytes = rsn_elt.info
+                                # SAE AKM suite is 00:0F:AC:08
+                                if b'\x00\x0f\xac\x08' in rsn_bytes:
+                                    has_wpa3 = True
+                                # RSN Capabilities field (MFPR / MFPC for PMF)
+                                # AKM suites count is followed by RSN capabilities (2 bytes)
+                                if len(rsn_bytes) >= 8:
+                                    # Search for RSN Cap flags: 0x80 (MFPC), 0x40 (MFPR)
+                                    if b'\x00\x0f\xac\x06' in rsn_bytes or b'\x00\x0f\xac\x08' in rsn_bytes:
+                                        has_pmf = True
+                            rsn_elt = rsn_elt.payload
+                    except Exception:
+                        pass
+
+                    if has_wpa3:
+                        crypto_str = "WPA3/WPA2" if "WPA2" in crypto_str else "WPA3"
+                    if has_pmf and "PMF" not in crypto_str:
+                        crypto_str += "+PMF"
 
                     # Database check
                     db_info = self.db.get_info(bssid)
