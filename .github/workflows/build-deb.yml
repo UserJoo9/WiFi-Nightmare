@@ -29,7 +29,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Extract the matching section from CHANGELOG.md
-          # Tag is "v2.1.2", section header is "## [2.1.2]"
+          # e.g. tag "v3.0.0" matches section header "## [3.0.0]"
           VERSION="${GITHUB_REF_NAME#v}"
           NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
 

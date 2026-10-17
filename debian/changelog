@@ -1,3 +1,26 @@
+wifi-nightmare (3.0.0) unstable; urgency=medium
+
+  * PMKID Attack: clientless WPA2 hash harvesting for Hashcat mode 22000.
+  * Karma Attack: auto-respond to 802.11 Probe Requests to attract clients.
+  * Beacon Flooding: high-frequency 802.11 Beacon storm with custom SSIDs.
+  * WPA-Enterprise Fake RADIUS: rogue 802.1X AP harvesting PEAP/TTLS credentials.
+  * Smart Wordlists & Auto-Rockyou: SSID-aware candidate generation + ISP defaults.
+  * Session Export: JSON, CSV, and human-readable report export.
+  * Rich TUI Live Dashboard: real-time scanner with RSSI bars and security badges.
+  * Geo-Location BSSID Lookup: resolve AP location via Wigle.net and OpenWifi APIs.
+  * Multi-Card Aggregation Engine: dedicated Sniffer + Injector role assignment.
+  * Dual-Band Scanning: 2.4 GHz + 5 GHz channel hopping simultaneously.
+  * WPA3/SAE Transition Downgrade Attack: force fallback to WPA2-PSK via CSA.
+  * Multi-Vector Eviction: bypass 802.11w PMF via CSA and BTM requests.
+  * WPS PBC Sniffer: capture WPA-PSK on physical WPS button press.
+  * Algorithmic Known-PINs: offline ComputePIN, D-Link, EasyBox generators.
+  * WPA3 & PMF Detection in live scanner.
+  * Redesigned 2-column horizontal grid UI with per-option descriptions.
+  * Monitor mode now uses airmon-ng as primary method (iw as fallback).
+  * Automatic monitor interface name detection from airmon-ng output.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Fri, 17 Oct 2026 08:00:00 +0000
+
 wifi-nightmare (2.1.2) unstable; urgency=medium
 
   * Captive portal now triggers on Android 14/15, Samsung One UI 6/7, iOS, ColorOS, Xiaomi MIUI, Vivo Funtouch.
