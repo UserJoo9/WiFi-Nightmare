@@ -1,4 +1,4 @@
-wifi-nightmare (3.0.0) unstable; urgency=medium
+wifi-nightmare (3.0.1) unstable; urgency=medium
 
   * PMKID Attack: clientless WPA2 hash harvesting for Hashcat mode 22000.
   * Karma Attack: auto-respond to 802.11 Probe Requests to attract clients.
