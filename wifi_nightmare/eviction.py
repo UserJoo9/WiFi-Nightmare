@@ -124,8 +124,21 @@ class AdvancedEviction:
         try:
             sendp(frames, iface=self.interface, count=count, verbose=False)
             return count * len(frames)
+        except PermissionError:
+            logger.error(f"Deauth injection FAILED: Permission denied on {self.interface} — run as root")
+            print(f"\n\033[91m[!] Deauth FAILED: Permission denied on {self.interface} — run as root (sudo)\033[0m")
+            return 0
+        except OSError as e:
+            if "No such device" in str(e) or "Network is down" in str(e):
+                logger.error(f"Deauth injection FAILED: Interface {self.interface} is down or not in monitor mode")
+                print(f"\n\033[91m[!] Deauth FAILED: {self.interface} is down or not in monitor mode\033[0m")
+            else:
+                logger.error(f"Deauth injection OSError: {e}")
+                print(f"\n\033[91m[!] Deauth injection error: {e}\033[0m")
+            return 0
         except Exception as e:
-            logger.debug(f"Deauth/Disas burst failed: {e}")
+            logger.warning(f"Deauth/Disas burst failed: {e}")
+            print(f"\n\033[93m[!] Deauth injection warning: {e}\033[0m")
             return 0
 
     def send_csa_burst(self, target_channel: Optional[int] = None, count: int = 5) -> int:
@@ -142,8 +155,16 @@ class AdvancedEviction:
         try:
             sendp(beacon, iface=self.interface, count=count, verbose=False)
             return count
+        except PermissionError:
+            logger.error(f"CSA injection FAILED: Permission denied on {self.interface}")
+            print(f"\n\033[91m[!] CSA injection FAILED: run as root (sudo)\033[0m")
+            return 0
+        except OSError as e:
+            logger.error(f"CSA injection OSError on {self.interface}: {e}")
+            print(f"\n\033[91m[!] CSA injection error: {self.interface} down or not in monitor mode\033[0m")
+            return 0
         except Exception as e:
-            logger.debug(f"CSA injection failed: {e}")
+            logger.warning(f"CSA injection failed: {e}")
             return 0
 
     def send_btm_burst(self, client_mac: str, count: int = 2) -> int:

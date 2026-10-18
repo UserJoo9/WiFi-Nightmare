@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.1] - 2026-10-18 — Deauth Fix [NOT TESTED]
+
+### Bug fixes
+- **Deauth no longer silently fails when mdk4/aireplay-ng are not installed** — previously the tool would abort the entire handshake capture if no external deauth tool was found, even though Scapy-based eviction was available; now it falls back to Scapy-only injection automatically with a warning message
+- **External deauth tool check is now non-blocking** — `_start_burst()` in `capture_native.py` now skips the external broadcast step gracefully if no tool is present, instead of crashing the capture flow
+- **Deauth/CSA injection errors are now visible to the user** — previously all `sendp()` failures in `eviction.py` were silently swallowed into `logger.debug`; now `PermissionError` (run as root) and `OSError` (interface down / not in monitor mode) print a clear red error message so the user knows exactly what went wrong
+
+---
+
 ## [3.0.0] - 2026-10-17 — The Giant Update 🚀
 
 ### What's new
