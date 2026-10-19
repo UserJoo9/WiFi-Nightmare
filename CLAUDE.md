@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-19  
+> Last updated: 2026-10-19 (deep-scan pass 2)  
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -396,6 +396,66 @@ from scapy.all import (
 
 #### `debian/changelog` version mismatch
 **Fix:** Bumped from `wifi-nightmare (3.0.0)` to `wifi-nightmare (3.0.1)` so `.deb` file gets correct version number from `dpkg-buildpackage`.
+
+---
+
+---
+
+### FIXED — v3.0.2 (continued, deep-scan pass 2)
+
+#### Bug 4: `addr1`/`addr2`/`addr3` scope error in `sniffer_callback()` (CRITICAL)
+**File:** `wifi_nightmare/handshake.py` — `sniffer_callback()` around line 157  
+**Symptom:** Any EAPOL packet that **lacked a Dot11 layer** (e.g. a raw Ethernet-encapsulated EAPOL during replay) caused `NameError: name 'addr1' is not defined`. The error was silently swallowed by `except Exception: pass`, so the EAPOL frame was silently dropped and never recorded in `self.eapol_packets`. Handshake capture could stall indefinitely even with valid frames on the wire.  
+**Root cause:** `addr1`, `addr2`, `addr3` were only assigned inside the `if pkt.haslayer(Dot11):` block but were referenced afterwards in the EAPOL section (`if self.target_bssid in [addr1, addr2]:`), which runs regardless.  
+**Fix:** Added `addr1 = addr2 = addr3 = ""` initialisation before the `try:` block (line 157).
+
+```python
+# BEFORE (broken): addr1/addr2/addr3 defined only inside Dot11 block
+try:
+    if pkt.haslayer(Dot11):
+        addr1 = pkt.addr1.lower() if pkt.addr1 else ""
+        ...
+    if pkt.haslayer(EAPOL):
+        if self.target_bssid in [addr1, addr2]:   # ← NameError if no Dot11 layer
+
+# AFTER (fixed):
+addr1 = addr2 = addr3 = ""   # safe default before try block
+try:
+    if pkt.haslayer(Dot11):
+        addr1 = pkt.addr1.lower() if pkt.addr1 else ""
+        ...
+    if pkt.haslayer(EAPOL):
+        if self.target_bssid in [addr1, addr2]:   # ← always defined now
+```
+
+---
+
+#### Bug 5: `run_mass_attack()` using `self.interface` for injection and sniffing (CRITICAL)
+**File:** `wifi_nightmare/main.py` — `run_mass_attack()` (3 occurrences)  
+**Symptom:** In dual-card mode, the mass attack function used `self.interface` for:
+- `NetworkAttacker(interface=...)` — injection on wrong interface
+- `sniff(iface=...)` — sniffing on injector instead of dedicated sniffer
+- `ip link set ... up` — brought up the wrong interface on OSError recovery  
+**Fix:** Changed all 3 occurrences: `NetworkAttacker` → `self.injector_interface`, `sniff` and `ip link set` → `self.sniffer_interface`.
+
+---
+
+#### Bug 6: `run_pixie_dust_workflow()` wrong interfaces (4 occurrences)
+**File:** `wifi_nightmare/main.py` — `run_pixie_dust_workflow()`  
+**Symptom:** All WPS attack paths in the workflow used `self.interface` instead of the correct role-specific interface, breaking dual-card mode for every WPS method.  
+**Details:**
+1. `WPSPbcSniffer(self.interface, ...)` — PBC sniffer should use `sniffer_interface`
+2. `iw dev self.interface set channel` (Known-PINs) — channel set should target `injector_interface`
+3. `reaver -i self.interface` (Known-PINs) — reaver injects WPS packets, needs `injector_interface`
+4. `PixieDustAttack(interface=self.interface, ...)` — reaver spawned inside uses injector role  
+**Fix:** (1) → `sniffer_interface`, (2)(3)(4) → `injector_interface`.
+
+---
+
+#### Bug 7: `run_scanner_process()` sniffing on wrong interface
+**File:** `wifi_nightmare/main.py` — `run_scanner_process()`  
+**Symptom:** In dual-card mode, the main scan loop sniffed on `self.interface` (the primary injector card in dual mode) instead of `self.sniffer_interface`. This meant beacon/probe/data frames were received on the injector card (which may have been hopping channels or actively transmitting), causing missed networks and unstable scanning. The OSError recovery also brought up the wrong interface.  
+**Fix:** Changed `sniff(iface=self.interface, ...)` → `sniffer_interface` and `ip link set self.interface up` → `sniffer_interface`.
 
 ---
 
