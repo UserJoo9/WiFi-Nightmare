@@ -1,3 +1,14 @@
+wifi-nightmare (3.0.2) unstable; urgency=medium
+
+  * Fix dual-card: EvilTwin deauth was injecting on sniffer card (Bug 8).
+  * Fix dual-card: mass-attack and scanner sniffed on injector card (Bug 7).
+  * Fix dual-card: WPS workflow used wrong interface on all 4 code paths (Bug 6).
+  * Fix dual-card: EAPOL handshake sniffer ran on injector instead of sniffer (Bug 5).
+  * Fix crash: addr1/addr2/addr3 NameError on non-Dot11 EAPOL packets (Bug 4).
+  * Fix dual-card: OSError recovery brought up wrong interface in scan/mass-attack loops.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Sun, 19 Oct 2026 18:00:00 +0300
+
 wifi-nightmare (3.0.1) unstable; urgency=medium
 
   * PMKID Attack: clientless WPA2 hash harvesting for Hashcat mode 22000.

@@ -58,7 +58,7 @@ class SessionExporter:
         return {
             'session_id': self.session_id,
             'tool': 'WiFi-Nightmare',
-            'version': '3.0.0',
+            'version': '3.0.2',
             'timestamp': datetime.datetime.now().isoformat(),
             'interface': interface,
             'duration_seconds': int(time.time() - self.session_start),

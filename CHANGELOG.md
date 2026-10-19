@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.2] - 2026-10-19 — Dual-Card Interface Bug-Fix Pass
+
+### Bug fixes
+- **Dual-card: mass attack sniffed on injector card instead of sniffer (Bug 7)** — `run_scanner_process()` and `run_mass_attack()` were passing `self.interface` to `sniff()` in dual-card mode, which pointed to the primary injector card rather than the dedicated sniffer; moved to `self.sniffer_interface` for packet capture and `self.injector_interface` for `NetworkAttacker` injection
+- **Dual-card: WPS attack workflow used wrong interface on all 4 paths (Bug 6)** — `run_pixie_dust_workflow()` used `self.interface` for `WPSPbcSniffer`, `iw set channel`, `reaver -i`, and `PixieDustAttack`; corrected to `sniffer_interface` for sniffing and `injector_interface` for injection/channel control
+- **Dual-card: Evil Twin deauth ran on sniffer card (Bug 8)** — `run_eviltwin_workflow()` passed `interface=self.interface` (= wlan0mon, the sniffer) to `EvilTwinAttack`; since `EvilTwinAttack` uses `BaseAttacker` for all deauth injection, deauth frames were silently sent from the wrong card; fixed to `interface=self.injector_interface`
+- **Dual-card: handshake capture EAPOL sniffer used wrong interface (Bug 5)** — `run_mass_attack()` sniffed EAPOL handshake frames on `self.interface` (injector) instead of `self.sniffer_interface`; missed handshakes on the dedicated capture card
+- **Variable scope crash in handshake sniffer callback (Bug 4)** — `addr1`/`addr2`/`addr3` were defined inside the `if pkt.haslayer(Dot11)` block but referenced in the outer EAPOL check, causing `NameError` on non-Dot11 EAPOL frames (e.g. Ethernet-encapsulated); moved variable definitions outside the block with safe defaults
+- **OSError recovery brought up the wrong interface (Bugs 5, 7)** — the `ip link set ... up` recovery line in the scan and mass-attack loops referenced `self.interface` instead of `self.sniffer_interface`, leaving the sniffer interface down after a transient error
+
 ## [3.0.1] - 2026-10-18 — Deauth Fix [NOT TESTED]
 
 ### Bug fixes
