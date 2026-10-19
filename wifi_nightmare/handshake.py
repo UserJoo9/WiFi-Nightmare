@@ -6,7 +6,7 @@ import subprocess
 try:
     from scapy.all import (
         sniff, sendp, wrpcap, RadioTap, Dot11, Dot11Elt, Dot11ProbeReq,
-        Dot11Auth, Dot11AssoReq, EAPOL
+        Dot11Auth, Dot11AssoReq, EAPOL, Raw
     )
     HAS_SCAPY = True
 except ImportError:

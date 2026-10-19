@@ -922,7 +922,7 @@ class WifiGTR:
                 def _quick_filter(pkt):
                     return pkt.haslayer(Dot11) or pkt.haslayer(EAPOL)
                 try:
-                    sniff(iface=self.interface, prn=attacker.sniffer_callback,
+                    sniff(iface=self.sniffer_interface, prn=attacker.sniffer_callback,
                           store=0, stop_filter=_should_stop, lfilter=_quick_filter)
                 except Exception as e:
                     logger.error(f"Sniffer thread crashed: {e}")
