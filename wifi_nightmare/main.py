@@ -721,7 +721,7 @@ class WifiGTR:
         print(f"{C_CYAN}[*] Proceeding to Evil Twin with SSID: {ssid}{C_RESET}")
 
         if EvilTwinAttack:
-            et_attack = EvilTwinAttack(self.esp_driver, self.db, bssid, channel, ssid, interface=self.interface)
+            et_attack = EvilTwinAttack(self.esp_driver, self.db, bssid, channel, ssid, interface=self.injector_interface)
             et_attack.run()
         else:
             print(f"{C_RED}[!] Error: EvilTwin module not loaded.{C_RESET}")
