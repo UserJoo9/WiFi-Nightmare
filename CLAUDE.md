@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-19 (deep-scan pass 2)  
+> Last updated: 2026-10-19 (deep-scan pass 3 — Bug 8 fix)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -456,6 +456,14 @@ try:
 **File:** `wifi_nightmare/main.py` — `run_scanner_process()`  
 **Symptom:** In dual-card mode, the main scan loop sniffed on `self.interface` (the primary injector card in dual mode) instead of `self.sniffer_interface`. This meant beacon/probe/data frames were received on the injector card (which may have been hopping channels or actively transmitting), causing missed networks and unstable scanning. The OSError recovery also brought up the wrong interface.  
 **Fix:** Changed `sniff(iface=self.interface, ...)` → `sniffer_interface` and `ip link set self.interface up` → `sniffer_interface`.
+
+---
+
+#### Bug 8: `run_eviltwin_workflow()` passes sniffer card to EvilTwinAttack (FIXED — commit `c7bbd4f`)
+**File:** `wifi_nightmare/main.py` line 724 — `run_eviltwin_workflow()`  
+**Symptom:** In dual-card mode, `EvilTwinAttack` received `interface=self.interface` (= `wlan0mon`, the sniffer card) instead of `self.injector_interface` (= `wlan1mon`). `EvilTwinAttack` uses its `self.interface` for ALL deauth injection via `BaseAttacker._send_deauth_broadcast()` and `_send_deauth_to_client()`. Result: deauth frames were sent from the sniffer card while the injector card was idle — evil twin deauth silently failed in dual-card mode.  
+**Root cause:** `self.interface` is assigned early in `start()` (after `enable_monitor_mode()`) but before dual-card role assignment. It always points to the sniffer card in dual-card mode. The correct interface for injection is `self.injector_interface`.  
+**Fix:** Changed `interface=self.interface` → `interface=self.injector_interface`. Safe in single-card mode because `self.injector_interface == self.interface` there.
 
 ---
 
