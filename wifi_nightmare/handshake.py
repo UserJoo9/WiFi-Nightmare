@@ -154,6 +154,7 @@ class NetworkAttacker(BaseAttacker):
             if self.target_ssid not in ("Unknown", "<HIDDEN>"):
                 return
 
+        addr1 = addr2 = addr3 = ""  # defaults prevent NameError if packet has no Dot11 layer
         try:
             if pkt.haslayer(Dot11):
                 addr1 = pkt.addr1.lower() if pkt.addr1 else ""
