@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.3] - 2026-10-22 — Startup Adapter Detection Fix
+
+### Bug fixes
+- Startup: adapter-existence check silently accepted an unrelated, unrequested
+  wireless card (hardcoded `wlan0`/`wlan0mon`/`mon0` fallback) instead of
+  reporting that the requested antenna was missing or unplugged (Bug 9)
+- Dual-card: monitor-mode "already enabled?" check could falsely match a
+  leftover `wlan0mon` from the first card while preparing the second card,
+  silently collapsing sniffer and injector onto the same physical adapter (Bug 9)
+
 ## [3.0.2] - 2026-10-19 — Dual-Card Interface Bug-Fix Pass
 
 ### Bug fixes

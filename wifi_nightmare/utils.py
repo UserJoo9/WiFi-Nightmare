@@ -85,13 +85,26 @@ def check_root():
         sys.exit(1)
 
 def check_interface_exists(interface):
-    # Check potential names (original or with mon suffix)
-    possible_names = [interface, interface + "mon", "wlan0mon", "mon0", "wlan0"]
+    """Verify the SPECIFIC adapter the user asked for is actually present
+    (antenna/dongle plugged in and recognized by the kernel).
+
+    Only checks `interface` itself and its natural monitor-mode sibling
+    (e.g. 'wlan0' <-> 'wlan0mon'). It must NOT fall back to unrelated
+    hardcoded names like "wlan0" or "wlan0mon" -- on a multi-adapter box
+    those belong to a DIFFERENT physical card and would make a missing /
+    unplugged adapter look present, hiding the real problem instead of
+    reporting it.
+    """
+    base = interface[:-3] if interface.endswith("mon") else interface
+    possible_names = [interface, base, base + "mon"]
     for name in possible_names:
         if os.path.exists(f"/sys/class/net/{name}"):
             return name
-    
+
     logger.error(f"Interface '{interface}' not found.")
+    print(f"{C_RED}[!] Interface '{interface}' not found.{C_RESET}")
+    print(f"{C_YELLOW}    Check that the Wi-Fi adapter is plugged in and recognized "
+          f"(try 'ip link' or 'iw dev').{C_RESET}")
     sys.exit(1)
 
 def run_command(cmd_list, check=False):
@@ -141,7 +154,8 @@ def enable_monitor_mode(interface):
     time.sleep(0.5)
 
     # 2. Smart Check: Is it already in Monitor Mode?
-    check_list = [interface, interface + "mon", "wlan0mon"]
+    base = interface[:-3] if interface.endswith("mon") else interface
+    check_list = [interface, base + "mon"]
 
     for iface in check_list:
         if os.path.exists(f"/sys/class/net/{iface}"):
@@ -198,7 +212,7 @@ def enable_monitor_mode(interface):
                 return mon_iface
 
             # Name detection missed — probe common names
-            for candidate in (interface + "mon", "mon0", "wlan0mon"):
+            for candidate in (base + "mon", "mon0"):
                 if os.path.exists(f"/sys/class/net/{candidate}"):
                     print(f"{C_GREEN}[+] Monitor Mode Enabled via airmon-ng: {candidate}{C_RESET}")
                     logger.info(f"airmon-ng: monitor mode enabled on {candidate}")

@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-19 (deep-scan pass 3 — Bug 8 fix)
+> Last updated: 2026-10-22 (deep-scan pass 4 — Bug 9 fix: startup adapter/monitor-mode detection)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -464,6 +464,16 @@ try:
 **Symptom:** In dual-card mode, `EvilTwinAttack` received `interface=self.interface` (= `wlan0mon`, the sniffer card) instead of `self.injector_interface` (= `wlan1mon`). `EvilTwinAttack` uses its `self.interface` for ALL deauth injection via `BaseAttacker._send_deauth_broadcast()` and `_send_deauth_to_client()`. Result: deauth frames were sent from the sniffer card while the injector card was idle — evil twin deauth silently failed in dual-card mode.  
 **Root cause:** `self.interface` is assigned early in `start()` (after `enable_monitor_mode()`) but before dual-card role assignment. It always points to the sniffer card in dual-card mode. The correct interface for injection is `self.injector_interface`.  
 **Fix:** Changed `interface=self.interface` → `interface=self.injector_interface`. Safe in single-card mode because `self.injector_interface == self.interface` there.
+
+---
+
+#### Bug 9: Startup adapter check silently accepted the WRONG physical card (FIXED — commit pending)
+**File:** `wifi_nightmare/utils.py` — `check_interface_exists()` and `enable_monitor_mode()`  
+**Symptom:** Two separate functions used a **hardcoded fallback list** (`"wlan0"`, `"wlan0mon"`, `"mon0"`) instead of checking only the specific adapter the user actually requested:
+1. `check_interface_exists(interface)` checked `[interface, interface+"mon", "wlan0mon", "mon0", "wlan0"]`. On a box with more than one wireless adapter, launching with e.g. `wlan1` that is unplugged/missing would still pass this check as long as an unrelated `wlan0` existed — the tool never reported that the requested antenna was missing, it just silently continued with a dead interface.
+2. `enable_monitor_mode(interface)`'s "already in monitor mode?" smart-check used `[interface, interface+"mon", "wlan0mon"]`. In dual-card mode, when `start()` calls this on the SECOND adapter (e.g. `wlan1`), a leftover `wlan0mon` from the first card (or a previous run) would falsely match, making the function think `wlan1` was "already in monitor mode" and return `wlan0mon` instead — collapsing the sniffer and injector roles onto the same physical card with no error or warning.
+**Root cause:** Both existence/mode checks were scoped to a global, hardcoded adapter name instead of being derived from the `interface` argument that was actually passed in.
+**Fix:** Both functions now derive their candidate names only from the requested interface itself (`interface`, and its monitor-mode sibling via `base = interface[:-3] if interface.endswith("mon") else interface` → `base + "mon"`). No more cross-card name guessing. Behavior for the common single-adapter `wlan0` case is unchanged (same two names end up being checked); multi-adapter and dual-card setups now get an honest answer: a genuinely missing/unplugged adapter aborts startup with a clear message instead of silently continuing, and the second card in dual-card mode can no longer be mistaken for the first.
 
 ---
 

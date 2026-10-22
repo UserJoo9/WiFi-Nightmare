@@ -1,3 +1,12 @@
+wifi-nightmare (3.0.3) unstable; urgency=medium
+
+  * Fix startup: adapter-existence check no longer silently falls back to an
+    unrelated wlan0/wlan0mon/mon0 when the requested interface is missing (Bug 9).
+  * Fix dual-card: monitor-mode check could falsely match a leftover wlan0mon
+    from the first card while preparing the second card (Bug 9).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 05:00:00 +0300
+
 wifi-nightmare (3.0.2) unstable; urgency=medium
 
   * Fix dual-card: EvilTwin deauth was injecting on sniffer card (Bug 8).
