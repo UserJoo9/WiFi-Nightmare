@@ -1,15 +1,23 @@
 # Changelog
 
-## [3.0.5] - 2026-10-22 — Native-Tool Silent-Failure Fixes
+## [3.0.3] - 2026-10-22 — Deep-Scan Bug-Fix Pass (Startup, Evil Twin, Deauth) [UNTESTED]
+
+This release has NOT been tested on real hardware yet. It bundles every fix
+found in deep-scan passes 4-7 (Bugs 9-17), all code-reviewed and logically
+verified, but none of them have been run against a live adapter/AP yet.
+Treat it as a release candidate, not a confirmed-working build.
 
 ### Bug fixes
-- Karma Attack: airbase-ng crashing instantly was reported as a successful
-  finished attack, and never fell back to the working Scapy engine (Bug 13)
-- Beacon Flood: mdk4/mdk3 crashing instantly had the identical bug (Bug 14)
 
-## [3.0.4] - 2026-10-22 — Evil Twin Interface-Corruption Disasters
+**Startup / adapter detection**
+- Adapter-existence check silently accepted an unrelated, unrequested
+  wireless card (hardcoded `wlan0`/`wlan0mon`/`mon0` fallback) instead of
+  reporting that the requested antenna was missing or unplugged (Bug 9)
+- Dual-card: monitor-mode "already enabled?" check could falsely match a
+  leftover `wlan0mon` from the first card while preparing the second card,
+  silently collapsing sniffer and injector onto the same physical adapter (Bug 9)
 
-### Bug fixes
+**Evil Twin interface-corruption disasters**
 - Handshake capture forgot previously-seen clients between deauth bursts,
   shrinking the target list and the on-screen client count (Bug 10)
 - ESP-driven Evil Twin attack silently reverted the shared injector card to
@@ -21,15 +29,21 @@
 - WPA-Enterprise Evil Twin now checks the interface is in managed mode
   (and fixes it if not) before starting hostapd, instead of failing silently
 
-## [3.0.3] - 2026-10-22 — Startup Adapter Detection Fix
+**Native-tool silent failures**
+- Karma Attack: airbase-ng crashing instantly was reported as a successful
+  finished attack, and never fell back to the working Scapy engine (Bug 13)
+- Beacon Flood: mdk4/mdk3 crashing instantly had the identical bug (Bug 14)
 
-### Bug fixes
-- Startup: adapter-existence check silently accepted an unrelated, unrequested
-  wireless card (hardcoded `wlan0`/`wlan0mon`/`mon0` fallback) instead of
-  reporting that the requested antenna was missing or unplugged (Bug 9)
-- Dual-card: monitor-mode "already enabled?" check could falsely match a
-  leftover `wlan0mon` from the first card while preparing the second card,
-  silently collapsing sniffer and injector onto the same physical adapter (Bug 9)
+**Deauth channel-sync audit (full review of every deauth-using option)**
+- WPA3 Downgrade sent its CSA eviction burst with no channel lock on the
+  injector card at all (Bug 15)
+- Mass Attack only re-tuned the sniffer card per target, not the injector
+  actually doing the deauth — every target after the first in a batch got
+  deauth on the wrong channel in dual-card mode (Bug 16)
+- `run_attack()` — the Reveal/Passive deauth path, the most heavily used
+  deauth feature in the tool — never synced the injector's channel except
+  for handshake-capture mode; Reveal's deauth was a silent no-op in
+  dual-card setups whenever the injector was left on a different channel (Bug 17)
 
 ## [3.0.2] - 2026-10-19 — Dual-Card Interface Bug-Fix Pass
 

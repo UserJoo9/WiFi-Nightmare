@@ -1,13 +1,11 @@
-wifi-nightmare (3.0.5) unstable; urgency=medium
+wifi-nightmare (3.0.3) unstable; urgency=medium
 
-  * Fix: Karma Attack silently reported success when airbase-ng crashed
-    instantly instead of falling back to the Scapy engine (Bug 13).
-  * Fix: Beacon Flood had the identical silent-failure bug with mdk4/mdk3 (Bug 14).
-
- -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 08:00:00 +0300
-
-wifi-nightmare (3.0.4) unstable; urgency=high
-
+  * UNTESTED release candidate -- bundles deep-scan passes 4-7 (Bugs 9-17),
+    code-reviewed and logically verified but NOT yet run against real hardware.
+  * Fix startup: adapter-existence check no longer silently falls back to an
+    unrelated wlan0/wlan0mon/mon0 when the requested interface is missing (Bug 9).
+  * Fix dual-card: monitor-mode check could falsely match a leftover wlan0mon
+    from the first card while preparing the second card (Bug 9).
   * Fix: handshake capture dropped previously-seen clients between deauth
     bursts instead of accumulating them (Bug 10).
   * Fix: ESP-driven Evil Twin attack reverted the shared injector card to
@@ -16,17 +14,16 @@ wifi-nightmare (3.0.4) unstable; urgency=high
     restarted NetworkManager on exit, silently breaking the rest of the run (Bug 12).
   * Fix: WPA-Enterprise Evil Twin now switches the interface to managed mode
     before starting hostapd if it was left in monitor mode.
+  * Fix: Karma Attack silently reported success when airbase-ng crashed
+    instantly instead of falling back to the Scapy engine (Bug 13).
+  * Fix: Beacon Flood had the identical silent-failure bug with mdk4/mdk3 (Bug 14).
+  * Fix: WPA3 Downgrade sent CSA frames with no channel lock on the injector (Bug 15).
+  * Fix: Mass Attack never re-tuned the injector card per target, missing
+    deauth on every target after the first in dual-card mode (Bug 16).
+  * Fix: run_attack()'s Reveal/Passive deauth path never synced the injector's
+    channel, making Reveal's deauth a silent no-op in dual-card setups (Bug 17).
 
- -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 07:00:00 +0300
-
-wifi-nightmare (3.0.3) unstable; urgency=medium
-
-  * Fix startup: adapter-existence check no longer silently falls back to an
-    unrelated wlan0/wlan0mon/mon0 when the requested interface is missing (Bug 9).
-  * Fix dual-card: monitor-mode check could falsely match a leftover wlan0mon
-    from the first card while preparing the second card (Bug 9).
-
- -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 05:00:00 +0300
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 09:00:00 +0300
 
 wifi-nightmare (3.0.2) unstable; urgency=medium
 
