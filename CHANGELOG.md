@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.4] - 2026-10-22 — Evil Twin Interface-Corruption Disasters
+
+### Bug fixes
+- Handshake capture forgot previously-seen clients between deauth bursts,
+  shrinking the target list and the on-screen client count (Bug 10)
+- ESP-driven Evil Twin attack silently reverted the shared injector card to
+  managed mode when it finished, breaking every later deauth/injection in
+  the same run until the program was restarted (Bug 11)
+- Software Evil Twin silently restored the primary radio to managed mode
+  AND restarted NetworkManager when it finished, breaking every later
+  scan/attack in the same run (Bug 12)
+- WPA-Enterprise Evil Twin now checks the interface is in managed mode
+  (and fixes it if not) before starting hostapd, instead of failing silently
+
 ## [3.0.3] - 2026-10-22 — Startup Adapter Detection Fix
 
 ### Bug fixes

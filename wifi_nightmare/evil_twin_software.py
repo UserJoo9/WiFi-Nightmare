@@ -17,7 +17,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs
 from scapy.all import sendp, sniff, RadioTap, Dot11, Dot11Deauth
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_RESET
-from wifi_nightmare.utils import run_command, verify_password, mask_bssid
+from wifi_nightmare.utils import run_command, verify_password, mask_bssid, enable_monitor_mode
 from wifi_nightmare.logger import logger
 
 PORTAL_AP_IP = "10.0.0.1"
@@ -1779,18 +1779,26 @@ log-async
         except KeyboardInterrupt:
             print(f"\n\n{C_YELLOW}[!] Attack stopped by user{C_RESET}")
         finally:
-            self._cleanup()
+            self._cleanup()  # already deletes self._mon_interface and nulls it out
 
-            # Clean up monitor interface if separate
-            if self._mon_interface:
-                run_command(["iw", "dev", self._mon_interface, "del"])
-
-            # Restore original interface to managed mode
-            run_command(["ip", "link", "set", self.original_interface, "down"])
-            run_command(["iw", "dev", self.original_interface, "set", "type", "managed"])
-            run_command(["ip", "link", "set", self.original_interface, "up"])
-            run_command(["systemctl", "start", "NetworkManager"])
-            print(f"{C_GREEN}[+] Interface restored to managed mode{C_RESET}")
+            # Hand the shared physical radio back to the REST OF THE APP in
+            # the state it actually expects: monitor mode, not managed.
+            #
+            # main.py keeps using self.original_interface's monitor-mode vif
+            # (as self.interface / self.sniffer_interface / self.injector_interface)
+            # for every attack run AFTER this one, in the SAME session --
+            # scan_workflow()'s target menu loop is still waiting right below
+            # this call. Forcing the card to managed mode and restarting
+            # NetworkManager here (the old behavior) silently killed monitor
+            # mode -- and therefore deauth/scanning -- for the rest of the
+            # run, with no error shown; the user had to restart the whole
+            # program to get a working interface back.
+            try:
+                enable_monitor_mode(self.original_interface)
+                print(f"{C_GREEN}[+] {self.original_interface} handed back in monitor mode{C_RESET}")
+            except Exception as e:
+                logger.warning(f"Could not restore monitor mode on {self.original_interface}: {e}")
+                print(f"{C_YELLOW}[!] Could not restore monitor mode on {self.original_interface}: {e}{C_RESET}")
 
             # Summary
             print(f"\n{C_YELLOW}[*] Attack Summary:{C_RESET}")

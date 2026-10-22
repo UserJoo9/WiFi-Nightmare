@@ -20,6 +20,7 @@ from typing import Optional, List
 
 from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET
 from wifi_nightmare.logger import logger
+from wifi_nightmare.utils import _get_iw_mode, run_command
 
 RADIUS_ACCESS_REQUEST   = 1
 RADIUS_ACCESS_ACCEPT    = 2
@@ -293,8 +294,30 @@ own_ip_addr=127.0.0.1
             f.write(conf)
         return conf_path
 
+    def _ensure_managed_mode(self):
+        """hostapd needs a managed/AP-capable interface, not a monitor-mode
+        one. self.interface here is the ORIGINAL interface name, which can
+        still be stuck in monitor mode (e.g. a driver that puts the adapter
+        into monitor mode in-place, with no separate '<iface>mon' vif, or a
+        leftover monitor-mode state from a previous run). Starting hostapd
+        on a monitor-mode interface fails outright, so fix that first instead
+        of leaving the attack silently dead."""
+        mode = _get_iw_mode(self.interface)
+        if mode == "monitor":
+            print(f"{C_YELLOW}[*] {self.interface} is in monitor mode — switching to managed for hostapd...{C_RESET}")
+            run_command(["ip", "link", "set", self.interface, "down"])
+            time.sleep(0.3)
+            run_command(["iw", "dev", self.interface, "set", "type", "managed"])
+            time.sleep(0.3)
+            run_command(["ip", "link", "set", self.interface, "up"])
+            time.sleep(0.3)
+            if _get_iw_mode(self.interface) == "monitor":
+                print(f"{C_RED}[!] Could not switch {self.interface} out of monitor mode — "
+                      f"hostapd will likely fail to start.{C_RESET}")
+
     def run(self):
         print(f"\n{C_CYAN}--- WPA-Enterprise Evil Twin ---{C_RESET}")
+        self._ensure_managed_mode()
         print(f"{C_YELLOW}[*] Generating self-signed certificates...{C_RESET}")
 
         certs = generate_fake_certs(self.cert_dir)

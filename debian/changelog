@@ -1,3 +1,16 @@
+wifi-nightmare (3.0.4) unstable; urgency=high
+
+  * Fix: handshake capture dropped previously-seen clients between deauth
+    bursts instead of accumulating them (Bug 10).
+  * Fix: ESP-driven Evil Twin attack reverted the shared injector card to
+    managed mode on exit, silently breaking deauth for the rest of the run (Bug 11).
+  * Fix: Software Evil Twin restored the primary radio to managed mode and
+    restarted NetworkManager on exit, silently breaking the rest of the run (Bug 12).
+  * Fix: WPA-Enterprise Evil Twin now switches the interface to managed mode
+    before starting hostapd if it was left in monitor mode.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 07:00:00 +0300
+
 wifi-nightmare (3.0.3) unstable; urgency=medium
 
   * Fix startup: adapter-existence check no longer silently falls back to an

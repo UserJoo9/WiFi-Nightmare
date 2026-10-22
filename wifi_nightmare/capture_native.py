@@ -176,6 +176,12 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
         SILENT_SECONDS = 5
         deauth_err_file = os.path.join(tmpdir, "deauth_err.txt")
 
+        # Accumulated across the WHOLE capture session (all cycles). A client
+        # that doesn't appear in one CSV snapshot (airodump hasn't flushed
+        # yet, or it went briefly idle) must not be dropped from targeting
+        # or from the client counter shown in the status line.
+        known_clients = set()
+
         def _stop_all_deauth():
             nonlocal deauth_procs
             for p in deauth_procs:
@@ -183,11 +189,15 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
             deauth_procs = []
 
         def _start_burst():
-            nonlocal deauth_procs
+            nonlocal deauth_procs, known_clients
             _stop_all_deauth()
 
             csv_file = f"{cap_prefix}-01.csv"
-            discovered_clients = _extract_clients_from_csv(csv_file, bssid)
+            # Merge the fresh CSV read into everything seen so far, rather
+            # than replacing it -- otherwise a client missing from this one
+            # snapshot gets un-targeted and the client count can shrink.
+            known_clients = known_clients | _extract_clients_from_csv(csv_file, bssid)
+            discovered_clients = known_clients
 
             # 1. Targeted Unicast Deauth for every discovered client station
             if discovered_clients and shutil.which("aireplay-ng"):
@@ -239,13 +249,12 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
             return discovered_clients
 
         # ── Start first burst ─────────────────────────────────────────────────
-        initial_clients = _start_burst()
+        _start_burst()  # mutates `known_clients` above (nonlocal)
         burst_start   = time.time()
         deauth_active = True
         cycle         = 1
         cap_file      = f"{cap_prefix}-01.cap"
         csv_file      = f"{cap_prefix}-01.csv"
-        known_clients = set(initial_clients)
 
         print(f"{C_GREEN}[+] Deauth active ({deauth_tool} + multi-vector eviction on {inj_iface}){C_RESET}")
         print(f"{C_CYAN}    Cycle strategy: {BURST_SECONDS}s deauth burst → {SILENT_SECONDS}s reconnect window{C_RESET}")
@@ -296,7 +305,7 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
 
             elif not deauth_active and elapsed_phase >= SILENT_SECONDS:
                 cycle += 1
-                known_clients = _start_burst()
+                _start_burst()  # mutates `known_clients` (nonlocal)
                 deauth_active = True
                 burst_start   = now
                 logger.info(f"Deauth burst #{cycle} started ({len(known_clients)} clients targeted)")

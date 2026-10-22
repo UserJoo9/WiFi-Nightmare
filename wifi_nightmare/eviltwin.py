@@ -262,14 +262,17 @@ class EvilTwinAttack(BaseAttacker):
         finally:
             self._stop_deauth_attacks()
             self.esp.stop_all()
-            if self.interface:
-                try:
-                    run_command(["ip", "link", "set", self.interface, "down"])
-                    run_command(["iw", "dev", self.interface, "set", "type", "managed"])
-                    run_command(["ip", "link", "set", self.interface, "up"])
-                    print(f"{C_GREEN}[+] Interface restored to managed mode{C_RESET}")
-                except Exception as e:
-                    print(f"{C_RED}[!] Failed to restore interface: {e}{C_RESET}")
+            # NOTE: deliberately NOT reverting self.interface to managed mode
+            # here. self.interface is the shared injector card for the WHOLE
+            # app session (main.py keeps using it for every later attack),
+            # not something owned exclusively by this one Evil Twin run.
+            # Forcing it back to managed mode on exit used to silently break
+            # deauth/injection for every subsequent attack in the same run,
+            # until the program was restarted -- the interface was taken out
+            # of monitor mode behind main.py's back, with main.py having no
+            # idea its injector_interface was no longer usable. Global
+            # interface restoration belongs to WifiGTR.cleanup() at full
+            # program exit (utils.restore_managed_mode), not here.
 
             print(f"\n{C_YELLOW}[*] Final stats:{C_RESET}")
             print(f"    Total deauth packets: {self.total_deauths}")

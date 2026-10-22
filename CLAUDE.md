@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-22 (deep-scan pass 4 — Bug 9 fix: startup adapter/monitor-mode detection)
+> Last updated: 2026-10-22 (deep-scan pass 5 — Bugs 10-12 + hardening: client tracking, interface-mode disasters after Evil Twin runs)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -474,6 +474,35 @@ try:
 2. `enable_monitor_mode(interface)`'s "already in monitor mode?" smart-check used `[interface, interface+"mon", "wlan0mon"]`. In dual-card mode, when `start()` calls this on the SECOND adapter (e.g. `wlan1`), a leftover `wlan0mon` from the first card (or a previous run) would falsely match, making the function think `wlan1` was "already in monitor mode" and return `wlan0mon` instead — collapsing the sniffer and injector roles onto the same physical card with no error or warning.
 **Root cause:** Both existence/mode checks were scoped to a global, hardcoded adapter name instead of being derived from the `interface` argument that was actually passed in.
 **Fix:** Both functions now derive their candidate names only from the requested interface itself (`interface`, and its monitor-mode sibling via `base = interface[:-3] if interface.endswith("mon") else interface` → `base + "mon"`). No more cross-card name guessing. Behavior for the common single-adapter `wlan0` case is unchanged (same two names end up being checked); multi-adapter and dual-card setups now get an honest answer: a genuinely missing/unplugged adapter aborts startup with a clear message instead of silently continuing, and the second card in dual-card mode can no longer be mistaken for the first.
+
+---
+
+#### Bug 10: `capture_handshake()` forgets previously-known clients between deauth bursts
+**File:** `wifi_nightmare/capture_native.py` — `capture_handshake()` / `_start_burst()`  
+**Symptom:** Every time a new deauth burst cycle started, `known_clients = _start_burst()` REPLACED the accumulated client set with whatever `_extract_clients_from_csv()` returned at that exact instant. If a client wasn't in the CSV snapshot right then (airodump-ng hadn't flushed yet, or the client was briefly idle), it silently dropped out of both the displayed client count AND the next round's targeted unicast deauth list — even though it had been seen (and targeted) earlier in the same capture.  
+**Fix:** `known_clients` is now accumulated for the whole capture session; `_start_burst()` merges the fresh CSV read into it (`known_clients | csv_clients`) instead of overwriting it, and targets/returns the merged set.
+
+---
+
+#### Bug 11: ESP-driven `EvilTwinAttack` reverts the SHARED injector card to managed mode when it finishes
+**File:** `wifi_nightmare/eviltwin.py` — `EvilTwinAttack.run()`, `finally` block  
+**Symptom:** When the ESP32 Evil Twin attack ended (success, Ctrl+C, or any exception), its `finally` block ran `iw dev {self.interface} set type managed` on `self.interface`. In dual-card mode `self.interface` is `self.injector_interface` — the SAME card `main.py` keeps using for every attack for the rest of the session. The interface silently dropped out of monitor mode with no error shown; every later deauth/injection attempt in that run then failed until the whole program was restarted.  
+**Root cause:** The class treated the shared session-wide injector interface as if it were owned exclusively by this one attack.  
+**Fix:** Removed the forced managed-mode reversion. Interface lifecycle/restoration is `WifiGTR.cleanup()`'s job at full program exit (`utils.restore_managed_mode()`), not an individual attack's.
+
+---
+
+#### Bug 12: `SoftwareEvilTwin` restores the shared radio to managed mode AND restarts NetworkManager on exit
+**File:** `wifi_nightmare/evil_twin_software.py` — `SoftwareEvilTwin.run()`, `finally` block  
+**Symptom:** Same class of bug as Bug 11, but worse: at the end of every Software Evil Twin run it unconditionally ran `ip link set {original_interface} down` / `iw ... set type managed` / `up`, and then **`systemctl start NetworkManager`** — directly undoing the `service NetworkManager stop` + `pkill NetworkManager` that `enable_monitor_mode()` deliberately did at program startup specifically to keep NetworkManager out of the way for the whole session. After one Software Evil Twin run, the primary radio silently went back under NetworkManager's control and every subsequent scan/attack in `scan_workflow()`'s still-open target menu (the caller is sitting right below this call, not exiting) broke with no explanation.  
+**Fix:** Replaced the managed-mode/NetworkManager-restart block with a call to the SAME `utils.enable_monitor_mode()` helper the main app's startup uses, handing the card back in monitor mode (the state the rest of the session actually expects) instead of managed mode.
+
+---
+
+#### Bonus hardening: `WPAEnterpriseEvil` (radius_fake.py) never checked the interface was in managed mode before starting hostapd
+**File:** `wifi_nightmare/radius_fake.py`  
+**Symptom:** `self.interface` (the ORIGINAL interface name) is written straight into the hostapd config with no check of its actual current mode. On drivers that put the adapter into monitor mode in-place (no separate `<iface>mon` vif), or after a prior run left it in monitor mode, hostapd would just fail to start with no actionable message.  
+**Fix:** Added `_ensure_managed_mode()`, called at the top of `run()`: checks the interface's current mode and switches it to managed first if it's in monitor mode. No-op (same behavior as before) when it's already managed.
 
 ---
 
