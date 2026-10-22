@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-22 (deep-scan pass 5 — Bugs 10-12 + hardening: client tracking, interface-mode disasters after Evil Twin runs)
+> Last updated: 2026-10-22 (deep-scan pass 6 — Bugs 13-14: native-tool failures silently reported as success in Karma/Beacon Flood)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -503,6 +503,20 @@ try:
 **File:** `wifi_nightmare/radius_fake.py`  
 **Symptom:** `self.interface` (the ORIGINAL interface name) is written straight into the hostapd config with no check of its actual current mode. On drivers that put the adapter into monitor mode in-place (no separate `<iface>mon` vif), or after a prior run left it in monitor mode, hostapd would just fail to start with no actionable message.  
 **Fix:** Added `_ensure_managed_mode()`, called at the top of `run()`: checks the interface's current mode and switches it to managed first if it's in monitor mode. No-op (same behavior as before) when it's already managed.
+
+---
+
+#### Bug 13: `KarmaAttack._run_native_airbase()` reports success even when airbase-ng never started
+**File:** `wifi_nightmare/karma_attack.py`  
+**Symptom:** `run()` prefers `airbase-ng` when installed, falling back to the pure-Scapy engine only if `_run_native_airbase()` returns `False`. But that method returned `True` unconditionally at the end of the try block — even if the `airbase-ng` process exited almost instantly (bad CLI args, no permission, interface not AP-capable yet) with a non-zero code and zero output. The user saw "Karma Attack finished" after a fraction of a second, and the working Scapy fallback never ran.  
+**Fix:** Track whether any output was ever read and how quickly the process died; if it exited near-instantly with a non-zero/invalid exit code and no output, `_run_native_airbase()` now returns `False` so `run()` falls back to the Scapy engine, with a clear message about what happened.
+
+---
+
+#### Bug 14: `BeaconFlood._run_native_mdk()` has the identical "always reports success" bug
+**File:** `wifi_nightmare/beacon_flood.py`  
+**Symptom:** Same bug as Bug 13, in the mdk4/mdk3 native-tool path. A near-instant crash of `mdk4`/`mdk3` was reported as "Beacon Flood stopped" with no indication the flood never actually transmitted, and `run()` never tried the Scapy fallback.  
+**Fix:** Same pattern as Bug 13 — detect a near-instant non-zero exit and return `False` to trigger the Scapy fallback instead of silently claiming success.
 
 ---
 

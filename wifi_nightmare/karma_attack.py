@@ -93,6 +93,8 @@ class KarmaAttack:
         else:
             print(f"{C_RED}[!] Full Karma Mode: Replying to ALL probe requests{C_RESET}")
 
+        start_time = time.time()
+        got_output = False
         try:
             self._proc = subprocess.Popen(
                 cmd,
@@ -108,6 +110,7 @@ class KarmaAttack:
                 if not line:
                     time.sleep(0.05)
                     continue
+                got_output = True
                 line_str = line.strip()
                 if "Client" in line_str and "associated" in line_str:
                     print(f"\n{C_GREEN}[+] [KARMA SUCCESS] {line_str}{C_RESET}")
@@ -127,6 +130,18 @@ class KarmaAttack:
                         self._proc.kill()
                     except Exception:
                         pass
+
+        # airbase-ng that dies almost instantly, with no output at all and a
+        # non-zero exit code, never actually started the attack (bad args,
+        # missing permission, interface not ready for AP mode, etc). Treat
+        # that as a failure so run() falls back to the Scapy engine instead
+        # of reporting "finished" on an attack that never ran.
+        exit_code = self._proc.returncode if self._proc else None
+        died_instantly = (time.time() - start_time) < 3.0 and not got_output
+        if died_instantly and exit_code not in (None, 0):
+            print(f"{C_RED}[!] airbase-ng exited immediately (code {exit_code}) without starting — falling back to Scapy engine.{C_RESET}")
+            logger.warning(f"airbase-ng failed to start (exit {exit_code}); falling back to scapy karma engine")
+            return False
 
         print(f"\n{C_CYAN}[+] Karma Attack finished.{C_RESET}")
         return True

@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.5] - 2026-10-22 — Native-Tool Silent-Failure Fixes
+
+### Bug fixes
+- Karma Attack: airbase-ng crashing instantly was reported as a successful
+  finished attack, and never fell back to the working Scapy engine (Bug 13)
+- Beacon Flood: mdk4/mdk3 crashing instantly had the identical bug (Bug 14)
+
 ## [3.0.4] - 2026-10-22 — Evil Twin Interface-Corruption Disasters
 
 ### Bug fixes

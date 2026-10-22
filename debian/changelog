@@ -1,3 +1,11 @@
+wifi-nightmare (3.0.5) unstable; urgency=medium
+
+  * Fix: Karma Attack silently reported success when airbase-ng crashed
+    instantly instead of falling back to the Scapy engine (Bug 13).
+  * Fix: Beacon Flood had the identical silent-failure bug with mdk4/mdk3 (Bug 14).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 08:00:00 +0300
+
 wifi-nightmare (3.0.4) unstable; urgency=high
 
   * Fix: handshake capture dropped previously-seen clients between deauth

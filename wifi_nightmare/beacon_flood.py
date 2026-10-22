@@ -173,6 +173,7 @@ class BeaconFlood:
         if self.mode == 'clone' and self.ssid:
             print(f"{C_GREEN}[*] Broadcasting multiple persistent clones of: '{self.ssid}'{C_RESET}")
 
+        start = time.time()
         try:
             self._proc = subprocess.Popen(
                 cmd,
@@ -181,7 +182,6 @@ class BeaconFlood:
                 text=True
             )
 
-            start = time.time()
             while not self.stop_event.is_set():
                 if self._proc.poll() is not None:
                     break
@@ -208,6 +208,18 @@ class BeaconFlood:
                     os.remove(temp_file)
                 except Exception:
                     pass
+
+        # A tool that exits almost instantly with a non-zero code never
+        # actually started flooding (bad args, interface not ready for TX,
+        # missing permission). Report that as a failure so run() falls back
+        # to the Scapy engine instead of silently claiming "stopped" on an
+        # attack that never ran even once.
+        exit_code = self._proc.returncode if self._proc else None
+        died_instantly = (time.time() - start) < 2.0
+        if died_instantly and exit_code not in (None, 0):
+            print(f"\n{C_RED}[!] {tool} exited immediately (code {exit_code}) without starting — falling back to Scapy engine.{C_RESET}")
+            logger.warning(f"{tool} failed to start (exit {exit_code}); falling back to scapy beacon flood engine")
+            return False
 
         print(f"\n{C_GREEN}[+] Beacon Flood stopped.{C_RESET}")
         return True
