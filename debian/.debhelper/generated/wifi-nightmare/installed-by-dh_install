@@ -1,0 +1,4 @@
+./esp_firmware/esp32/firmware.bin
+./esp_firmware/esp32/bootloader.bin
+./esp_firmware/esp32/partitions.bin
+./esp_firmware/esp8266/firmware.bin
