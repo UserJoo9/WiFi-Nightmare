@@ -10,7 +10,7 @@ import time
 import datetime
 from typing import Dict, List, Optional, Any
 
-from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET
+from wifi_nightmare.config import C_GREEN, C_RED, C_YELLOW, C_CYAN, C_WHITE, C_GREY, C_RESET, VERSION
 
 EXPORT_DIR = os.path.expanduser('~/.wifi-nightmare/exports')
 
@@ -58,7 +58,7 @@ class SessionExporter:
         return {
             'session_id': self.session_id,
             'tool': 'WiFi-Nightmare',
-            'version': '3.0.3',
+            'version': VERSION,
             'timestamp': datetime.datetime.now().isoformat(),
             'interface': interface,
             'duration_seconds': int(time.time() - self.session_start),
@@ -142,7 +142,7 @@ class SessionExporter:
 
         lines = [
             "=" * 60,
-            "    WiFi-Nightmare v3.0.0 — Session Report",
+            f"    WiFi-Nightmare v{VERSION} — Session Report",
             "=" * 60,
             f"Session ID : {self.session_id}",
             f"Interface  : {interface}",

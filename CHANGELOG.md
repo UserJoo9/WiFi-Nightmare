@@ -1,5 +1,65 @@
 # Changelog
 
+## [3.0.4] - 2026-10-28 — Live-Hardware Fix Pass (Deauth, Evil Twin, Beacon) + Standalone Deauth Flood
+
+Every fix in this release was reproduced and confirmed on real hardware
+(Kali Linux, single TP-Link WN722N v1 / AR9271 adapter) during live testing,
+unlike the previous [UNTESTED] 3.0.3 release.
+
+### Bug fixes (CONFIRMED on real hardware)
+
+- **Beacon Flood always failed instantly** — mdk4's `-a` (auto-SSID) flag is
+  mutually exclusive with `-n`/`-f`/`-v`; the tool was combining them, causing
+  mdk4 to exit immediately on every run (Bug 18)
+- **Deauth was weak/unreliable** — the mdk4 path used the mdk3-era
+  `-b <blacklist file>` mode, which only reacts to observed traffic, instead
+  of `-B <BSSID>` direct/active AP targeting. All mdk4 deauth call sites
+  (standalone broadcast deauth, Software Evil Twin's integrated deauth
+  thread) now use `-B` (Bug 19)
+- **Software Evil Twin could crash the entire program** — an uncaught
+  `TimeoutExpired` from a stale phy-detection chain brought down the whole
+  session. Fixed the root cause AND wrapped every menu action in
+  `scan_workflow()` in a try/except, so no single attack can ever take the
+  whole program down again (Bug 20)
+- **Software Evil Twin single-card AP creation always failed** — the phy was
+  being detected *after* the only interface was already deleted during
+  teardown, leaving nothing to detect. Phy detection now happens before
+  teardown, with a re-detect safety net after (Bug 21)
+- **Software Evil Twin AP vif creation used the wrong `iw` interface type**
+  for ath9k_htc-class cards (`type ap`, which needs a management daemon and
+  fails outright) — now tries `managed` first (airgeddon-style, paired with
+  hostapd) before falling back to `__ap`. Cards that genuinely can't run
+  AP + monitor concurrently (confirmed via `iw phy info`) now get a clear
+  "AP only - No Deauth (1 card)" label instead of a failure (Bug 22)
+- **Injection error-flood after Evil Twin** — once an Evil Twin attack tore
+  down the monitor interface, every later deauth/injection attempt spammed
+  "No such device" / "Network is down" errors hundreds of times per second
+  with no rate limiting. Added a dead-interface circuit breaker to the
+  injection engine and a self-healing `_ensure_injector_ready()` check before
+  every injection path (standalone deauth, multi-vector eviction, general
+  attacks, post-Evil-Twin) that restores monitor mode automatically (Bug 23)
+
+### New feature
+
+- **Standalone "Deauth Flood" menu option** — runs continuous deauth on its
+  own (previously only bundled inside other attacks), using mdk4 `-B` /
+  aireplay-ng as a background process plus Scapy multi-vector bursts
+  (broadcast + per-client targeted deauth/disassoc/CSA) against every client
+  discovered live on the sniffer interface. Shows a live, redrawing table of
+  connected client MACs (privacy-masked), OUI vendor, and per-client packet
+  count so you can visually confirm the attack is landing, with a final
+  summary on Ctrl+C
+
+### UX improvements
+
+- Scan results and the saved-network database now number entries starting
+  from 1 instead of 0
+- Menu option number brackets (`[N]`) are now a single, uniform green across
+  every menu, instead of varying by item status
+- Removed the stale hardcoded "WiFi-Nightmare v3.0.0" title from the live
+  Rich dashboard panel — the version number is now shown in the main menu
+  banner only
+
 ## [3.0.3] - 2026-10-22 — Deep-Scan Bug-Fix Pass (Startup, Evil Twin, Deauth) [UNTESTED]
 
 This release has NOT been tested on real hardware yet. It bundles every fix

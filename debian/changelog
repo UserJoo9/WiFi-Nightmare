@@ -1,3 +1,34 @@
+wifi-nightmare (3.0.4) unstable; urgency=medium
+
+  * CONFIRMED on real hardware (Kali Linux, TP-Link WN722N v1 / AR9271) --
+    every fix in this release was reproduced and verified live, unlike the
+    previous [UNTESTED] 3.0.3 release.
+  * Fix: Beacon Flood always failed instantly because mdk4's -a flag was
+    being combined with -n/-f/-v, which are mutually exclusive (Bug 18).
+  * Fix: mdk4 deauth used the mdk3-era -b <blacklist file> mode instead of
+    direct -B <BSSID> active targeting, on every mdk4 call site (Bug 19).
+  * Fix: Software Evil Twin could crash the entire program via an uncaught
+    TimeoutExpired; also added a crash safety net around every menu action
+    so no single attack can take the whole program down again (Bug 20).
+  * Fix: Software Evil Twin detected the phy after deleting its only
+    interface, making single-card AP creation always fail (Bug 21).
+  * Fix: Software Evil Twin created the AP vif with the wrong iw interface
+    type for ath9k_htc-class cards; now tries managed+hostapd first, and
+    labels cards that cannot run AP + monitor concurrently instead of
+    failing (Bug 22).
+  * Fix: after an Evil Twin run tore down the monitor interface, every later
+    injection attempt spammed "No such device"/"Network is down" errors
+    hundreds of times per second; added a circuit breaker and a self-healing
+    monitor-mode check before every injection path (Bug 23).
+  * Feature: added a standalone "Deauth Flood" menu option with a live
+    redrawing client table (masked MAC, vendor, per-client packet count).
+  * UX: scan/saved-network lists now number from 1 instead of 0.
+  * UX: menu option number brackets are a uniform green across every menu.
+  * UX: removed the stale hardcoded "v3.0.0" title from the live dashboard
+    panel; the version number now shows in the main menu only.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Wed, 28 Oct 2026 02:12:00 +0300
+
 wifi-nightmare (3.0.3) unstable; urgency=medium
 
   * UNTESTED release candidate -- bundles deep-scan passes 4-7 (Bugs 9-17),
