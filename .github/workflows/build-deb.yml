@@ -45,6 +45,7 @@ jobs:
       - name: Update APT repository on gh-pages
         if: startsWith(github.ref, 'refs/tags/')
         run: |
+          set -e
           DEB_FILE=$(realpath ../wifi-nightmare_*.deb)
           cp install.sh /tmp/wifi-nightmare-install.sh
 
@@ -54,6 +55,8 @@ jobs:
 
           mkdir -p pool/main/w/wifi-nightmare/
           mkdir -p dists/stable/main/binary-amd64/
+          mkdir -p dists/stable/main/binary-arm64/
+          mkdir -p dists/stable/main/binary-all/
 
           cp "$DEB_FILE" pool/main/w/wifi-nightmare/
           cp /tmp/wifi-nightmare-install.sh install.sh
@@ -61,39 +64,38 @@ jobs:
           dpkg-scanpackages --multiversion pool/ > dists/stable/main/binary-amd64/Packages
           gzip -k -f dists/stable/main/binary-amd64/Packages
 
-          # Generate Release file without apt-ftparchive
-          cd dists/stable
-          PKGS=main/binary-amd64/Packages
-          PKGS_GZ=main/binary-amd64/Packages.gz
-          MD5=$(md5sum $PKGS | awk '{print $1}')
-          SHA1=$(sha1sum $PKGS | awk '{print $1}')
-          SHA256=$(sha256sum $PKGS | awk '{print $1}')
-          SIZE=$(stat -c%s $PKGS)
-          MD5_GZ=$(md5sum $PKGS_GZ | awk '{print $1}')
-          SHA1_GZ=$(sha1sum $PKGS_GZ | awk '{print $1}')
-          SHA256_GZ=$(sha256sum $PKGS_GZ | awk '{print $1}')
-          SIZE_GZ=$(stat -c%s $PKGS_GZ)
-          DATE=$(date -Ru)
-          cat > Release <<RELEASE_EOF
-Origin: WiFi-Nightmare
-Label: WiFi-Nightmare
-Suite: stable
-Codename: stable
-Architectures: amd64
-Components: main
-Description: WiFi-Nightmare APT repository
-Date: $DATE
-MD5Sum:
- $MD5 $SIZE $PKGS
- $MD5_GZ $SIZE_GZ $PKGS_GZ
-SHA1:
- $SHA1 $SIZE $PKGS
- $SHA1_GZ $SIZE_GZ $PKGS_GZ
-SHA256:
- $SHA256 $SIZE $PKGS
- $SHA256_GZ $SIZE_GZ $PKGS_GZ
-RELEASE_EOF
-          cd ../..
+          cp -f dists/stable/main/binary-amd64/Packages* dists/stable/main/binary-arm64/
+          cp -f dists/stable/main/binary-amd64/Packages* dists/stable/main/binary-all/
+
+          if command -v apt-ftparchive >/dev/null 2>&1; then
+            apt-ftparchive release dists/stable > dists/stable/Release
+          else
+            cd dists/stable
+            DATE=$(date -Ru)
+            {
+              echo "Origin: WiFi-Nightmare"
+              echo "Label: WiFi-Nightmare"
+              echo "Suite: stable"
+              echo "Codename: stable"
+              echo "Architectures: amd64 arm64 all"
+              echo "Components: main"
+              echo "Description: WiFi-Nightmare APT repository"
+              echo "Date: $DATE"
+              echo "MD5Sum:"
+              find main -type f | while read -r f; do
+                echo " $(md5sum "$f" | awk '{print $1}') $(stat -c%s "$f") $f"
+              done
+              echo "SHA1:"
+              find main -type f | while read -r f; do
+                echo " $(sha1sum "$f" | awk '{print $1}') $(stat -c%s "$f") $f"
+              done
+              echo "SHA256:"
+              find main -type f | while read -r f; do
+                echo " $(sha256sum "$f" | awk '{print $1}') $(stat -c%s "$f") $f"
+              done
+            } > Release
+            cd ../..
+          fi
 
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
