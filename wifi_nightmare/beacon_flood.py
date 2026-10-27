@@ -166,7 +166,13 @@ class BeaconFlood:
                     f.write(f"{s}\n")
             cmd.extend(["-f", temp_file])
 
-        cmd.extend(["-c", str(self.channel), "-a", "-s", "100"])
+        # NOTE: do NOT add "-a" here. In mdk4 (4.x), beacon-mode -a means
+        # "generate SSIDs with non-printable chars / break the 32-byte limit",
+        # and it is MUTUALLY EXCLUSIVE with -n / -f / -v (mdk4 aborts with
+        # "Only one of -n -a -f or -v may be selected" and exit code 1).
+        # Since we always pass -n (clone) or -f (list), -a made mdk4 fail
+        # instantly every time, silently dropping us to the weak Scapy engine.
+        cmd.extend(["-c", str(self.channel), "-s", "100"])
 
         print(f"\n{C_CYAN}[*] Beacon Flood ACTIVE ({tool.upper()} Line-Rate Engine) | Mode: {self.mode.upper()}{C_RESET}")
         print(f"{C_YELLOW}[*] Hardware Channel: {self.channel} | SSIDs: {len(ssid_list)} | Ctrl+C to stop{C_RESET}")

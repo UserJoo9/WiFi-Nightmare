@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-22 (deep-scan pass 7 — Bugs 15-17: full deauth-flow audit, injector channel-sync missing in WPA3 downgrade / mass attack / reveal-passive modes)
+> Last updated: 2026-10-28 (HARDWARE-TESTED pass 8 — Bugs 18-19: mdk4 beacon -a mutual-exclusion crash + mdk4 deauth -B direct targeting; found via real Kali/mdk4 4.2 testing)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -538,6 +538,29 @@ try:
 **File:** `wifi_nightmare/main.py` — `run_attack()`  
 **Symptom:** The most heavily-used deauth feature in the whole tool (menu actions "Reveal" and "Passive", i.e. SSID decloaking). `run_attack()` only locked `self.interface` (the sniffer) to the target channel at the top. For `mode == "handshake"` this didn't matter because `capture_handshake()` locks the injector's channel internally -- but for every OTHER mode, `NetworkAttacker(interface=self.injector_interface, ...)` is built and injects deauth directly, with the injector card never tuned to the target's channel at all in dual-card mode. "Reveal" mode's deauth was effectively a no-op against the actual target whenever the injector card happened to be on a different channel (e.g. right after startup, or after any previous attack on another target).  
 **Fix:** Added an unconditional `iw ... set channel` on `self.injector_interface` (when different from `self.interface`) right after the existing sniffer channel-set, covering every mode. Harmless no-op duplicate for `mode == "handshake"` since `capture_handshake()` already does its own.
+
+---
+
+#### Bug 18: Beacon Flood always failed — `mdk4 -a` is mutually exclusive with `-n`/`-f` (CONFIRMED on real hardware)
+**File:** `wifi_nightmare/beacon_flood.py` — `_run_native_mdk()`  
+**Symptom:** Every beacon flood via mdk4 exited immediately with code 1 and silently fell back to the far weaker Scapy engine. Confirmed live on mdk4 4.2: the command `mdk4 wlan0mon b -n <ssid> -c <ch> -a -s 100` aborts with `Only one of -n -a -f or -v may be selected`.  
+**Root cause:** In mdk4 4.x, beacon-mode `-a` means "generate SSIDs with non-printable chars / break the 32-byte limit" and is MUTUALLY EXCLUSIVE with the other SSID-source flags `-n` / `-f` / `-v`. The code always passed `-n` (clone) or `-f` (list) **together with** `-a`, so mdk4 rejected the args every single time. (This was almost certainly a leftover assumption from mdk3, where `-a` meant something else.)  
+**Fix:** Removed `-a` from the beacon command. Verified live: without `-a`, mdk4 transmits beacons normally (~97 pkt/s).  
+**How it was found:** Real hardware testing (Kali, mdk4 4.2) — ran the exact program command manually with and without `-a`.
+
+---
+
+#### Bug 19: mdk4 deauth used the mdk3-era `-b <blacklist file>` instead of direct `-B <BSSID>` targeting
+**File:** `wifi_nightmare/capture_native.py` (`capture_handshake` broadcast deauth) and `wifi_nightmare/evil_twin_software.py` (`_deauth_thread`)  
+**Symptom:** Deauth via mdk4 was weak/unreliable — handshake capture succeeded on a busy AP (7 clients) but not on a quiet one (2 clients).  
+**Root cause:** mdk4 deauth mode `d` with `-b <file>` is the mdk3-era *blacklist* style, which deauths **based on observed data traffic** — on a quiet network with idle clients it sends very few deauths. mdk4 4.x exposes `-B <BSSID>` to actively target a specific AP regardless of traffic (confirmed working live). The code never used it.  
+**Fix:** mdk4 deauth now uses `-B <bssid> -c <channel>` (active direct targeting). mdk3 paths keep `-b <file>` since mdk3 has no `-B`. aireplay-ng paths unchanged.  
+**How it was found:** Real hardware testing — `mdk4 ... d -B <bssid> -c 6` confirmed to run cleanly (exit via timeout, not error).
+
+---
+
+#### Note: standalone deauth options are Scapy-only (not yet hardware-confirmed)
+`run_multivector_eviction()` (menu option 3) and the `deauth_only` path use the pure-Scapy `AdvancedEviction` engine, NOT mdk4/aireplay. Bugs 18-19 do not touch them. If standalone deauth still feels weak on real hardware after these fixes, the next step is to add an mdk4 `-B` / aireplay `-0` injection path alongside the Scapy frames there too. Pending live test feedback.
 
 ---
 

