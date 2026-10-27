@@ -268,7 +268,7 @@ def print_scan_table(interface, networks, lock):
             elif info['Hidden']: ssid_display = f"{C_GREY}<HIDDEN>{C_RESET}"
             else: ssid_display = f"{C_WHITE}{ssid_raw}{C_RESET}"
             wps_mark = f"{C_GREEN}Yes{C_RESET}" if info.get('WPS') else f"{C_GREY}No {C_RESET}"
-            print(f"{i:<4} {mask_bssid(bssid):<18} {pwr_color}{rssi:<5}{C_RESET} {hs_mark:<13} {wps_mark:<14} {info['Channel']:<4} {enc:<25} {vendor:<16} {cl_str} {ssid_display}")
+            print(f"{i+1:<4} {mask_bssid(bssid):<18} {pwr_color}{rssi:<5}{C_RESET} {hs_mark:<13} {wps_mark:<14} {info['Channel']:<4} {enc:<25} {vendor:<16} {cl_str} {ssid_display}")
     return display_list
 
 def print_attack_summary(result):
@@ -311,6 +311,6 @@ def show_saved_db(db_handler):
                 hs = "NO"
                 tm = ""
             hs_col = f"{C_GREEN}{hs}{C_RESET}" if hs == "YES" else f"{C_RED}{hs}{C_RESET}"
-            print(f"{i:<4} {mask_bssid(bssid):<20} {hs_col:<20} {tm:<10} {C_GREEN}{ssid}{C_RESET}")
+            print(f"{i+1:<4} {mask_bssid(bssid):<20} {hs_col:<20} {tm:<10} {C_GREEN}{ssid}{C_RESET}")
             i += 1
         return saved_list

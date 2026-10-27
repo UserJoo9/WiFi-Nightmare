@@ -1008,7 +1008,7 @@ class WifiGTR:
     def select_target_from_list(self):
         while True:
             try:
-                choice = input(f"\n[?] Select Network ID (Enter to cancel): ").strip()
+                choice = input(f"\n[?] Select Network ID (1-{len(self.display_list)}, Enter to cancel): ").strip()
                 if choice == "": return None
                 
                 if not choice.isdigit():
@@ -1016,14 +1016,14 @@ class WifiGTR:
                     continue
                     
                 idx = int(choice)
-                if 0 <= idx < len(self.display_list):
-                    bssid = self.display_list[idx]
+                if 1 <= idx <= len(self.display_list):
+                    bssid = self.display_list[idx - 1]
                     channel = self.scanner.networks[bssid]['Channel']
                     print(f"\n{C_GREEN}[+] Target Selected: {utils.mask_bssid(bssid)} (CH: {channel}){C_RESET}")
                     utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
                     return (bssid, channel)
                 else:
-                    print(f"{C_RED}[!] Invalid ID. Choose 0-{len(self.display_list)-1}.{C_RESET}")
+                    print(f"{C_RED}[!] Invalid ID. Choose 1-{len(self.display_list)}.{C_RESET}")
             except Exception as e:
                 logger.error(f"Input error: {e}")
                 return None
@@ -1336,8 +1336,8 @@ class WifiGTR:
         choice = input(f"{C_YELLOW}[?]{C_RESET} Enter Network ID to verify: ").strip()
         if choice.isdigit():
             idx = int(choice)
-            if 0 <= idx < len(saved_list):
-                bssid = saved_list[idx]
+            if 1 <= idx <= len(saved_list):
+                bssid = saved_list[idx - 1]
                 data = self.db.get_info(bssid)
                 pcap = data.get('HSFile', '')
                 if not pcap or not os.path.exists(pcap):

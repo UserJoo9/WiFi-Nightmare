@@ -164,7 +164,7 @@ class TUIDashboard:
             masked = mask_bssid(bssid)
 
             table.add_row(
-                str(i), masked, sig_text, str(info.get('Channel', '?')),
+                str(i + 1), masked, sig_text, str(info.get('Channel', '?')),
                 Text(enc_short, style=enc_color), wps_text, hs_text, cl_text,
                 vendor, ssid_text
             )
