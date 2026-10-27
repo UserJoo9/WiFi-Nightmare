@@ -64,7 +64,7 @@ class TUIDashboard:
     """Live Terminal Dashboard for WiFi-Nightmare."""
 
     def __init__(self, interface: str = 'wlan0mon',
-                 title: str = 'WiFi-Nightmare v3.0.0'):
+                 title: str = 'WiFi-Nightmare'):
         self.interface = interface
         self.title = title
         self._networks: Dict = {}
