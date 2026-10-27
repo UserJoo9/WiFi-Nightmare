@@ -525,6 +525,9 @@ class WifiGTR:
                 has_esp=bool(self.esp_driver and self.esp_driver.is_connected),
                 vif_ready=bool(self.vif_info and self.vif_info.get("ready")),
                 has_wps=bool(net_info.get('WPS')),
+                # Integrated Evil-Twin deauth needs a 2nd radio (AP + monitor at
+                # once). True only in dual-card mode.
+                et_deauth_ok=(self.sniffer_interface != self.injector_interface),
             )
 
             action = ui.menu_input("Select Action: ")

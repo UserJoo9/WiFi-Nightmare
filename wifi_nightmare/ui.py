@@ -144,7 +144,7 @@ def print_main_menu(interface, esp_status="Not Connected", vif_status="Unknown")
     print(' ' * margin + "─" * block_w)
 
 def print_target_menu(ssid, bssid, channel, client_count, crypto="Unknown", vendor="Unknown",
-                      has_esp=False, vif_ready=False, has_wps=False):
+                      has_esp=False, vif_ready=False, has_wps=False, et_deauth_ok=True):
     clear_screen()
     block_w, margin = get_menu_layout()
     print(' ' * margin + "═" * block_w)
@@ -165,6 +165,14 @@ def print_target_menu(ssid, bssid, channel, client_count, crypto="Unknown", vend
     esp_dis = "" if has_esp else "No ESP connected"
     vif_dis = "" if vif_ready else "VIF not supported"
     wps_dis = "" if has_wps else "No WPS detected"
+    # Software Evil Twin: if VIF isn't supported that takes priority; otherwise,
+    # on a single card (no 2nd adapter) warn that integrated deauth is OFF.
+    if not vif_ready:
+        sw_et_dis = vif_dis
+    elif not et_deauth_ok:
+        sw_et_dis = "AP only - No Deauth (1 card)"
+    else:
+        sw_et_dis = ""
 
     target_items = [
         ("1", "Capture Handshake (WPA2/3)", "Record 4-way authentication handshake", C_GREEN, ""),
@@ -173,7 +181,7 @@ def print_target_menu(ssid, bssid, channel, client_count, crypto="Unknown", vend
         ("4", "Passive Monitor (Stealth)", "Silent zero-transmission packet capture", C_GREEN, ""),
         ("5", "Generate Hashcat (hc22000)", "Convert handshake pcap to hashcat m22000", C_GREEN, ""),
         ("6", "Evil Twin (Hardware ESP)", "Rogue AP with captive phishing portal", C_CYAN if has_esp else C_GREY, esp_dis),
-        ("7", "Evil Twin (Software AP)", "Virtual AP (hostapd+dnsmasq) via VIF", C_CYAN if vif_ready else C_GREY, vif_dis),
+        ("7", "Evil Twin (Software AP)", "Virtual AP (hostapd+dnsmasq) via VIF", C_CYAN if vif_ready else C_GREY, sw_et_dis),
         ("8", "WPS Attack Suite", "Pixie Dust PRNG + PBC push button + PINs", C_YELLOW if has_wps else C_GREY, wps_dis),
         ("9", "Crack Handshake (aircrack)", "Direct offline dictionary attack with wordlists", C_GREEN, ""),
         ("10", "WPA3 Downgrade Attack", "Force WPA2 fallback via CSA beacons", C_GREEN, ""),
