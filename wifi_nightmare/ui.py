@@ -82,7 +82,7 @@ def print_grid_menu(items, col_width=45):
 
     if not two_col:
         for key, title, desc, col, disabled in items:
-            key_tag = f"[{col}{key}{C_RESET}]"
+            key_tag = f"[{C_GREEN}{key}{C_RESET}]"  # unified green option numbers
             dis_tag = f" {C_GREY}({disabled}){C_RESET}" if disabled else ""
             print(' ' * margin + f" {key_tag} {C_WHITE}{title}{C_RESET}{dis_tag}")
             print(' ' * margin + f"     {C_DESC}{desc}{C_RESET}\n")
@@ -103,14 +103,14 @@ def print_grid_menu(items, col_width=45):
         item2 = items[i + 1] if i + 1 < len(items) else None
 
         k1, t1, d1, c1, dis1 = item1
-        tag1 = f"[{c1}{k1}{C_RESET}]"
+        tag1 = f"[{C_GREEN}{k1}{C_RESET}]"  # unified green option numbers
         dis_tag1 = f" {C_GREY}({dis1}){C_RESET}" if dis1 else ""
         title_line1 = f" {tag1} {C_WHITE}{t1}{C_RESET}{dis_tag1}"
         desc_line1 = f"     {C_DESC}{d1}{C_RESET}"
 
         if item2:
             k2, t2, d2, c2, dis2 = item2
-            tag2 = f"[{c2}{k2}{C_RESET}]"
+            tag2 = f"[{C_GREEN}{k2}{C_RESET}]"  # unified green option numbers
             dis_tag2 = f" {C_GREY}({dis2}){C_RESET}" if dis2 else ""
             title_line2 = f" {tag2} {C_WHITE}{t2}{C_RESET}{dis_tag2}"
             desc_line2 = f"     {C_DESC}{d2}{C_RESET}"
