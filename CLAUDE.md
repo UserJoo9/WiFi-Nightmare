@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-28 (HARDWARE-TESTED pass 8 — Bugs 18-19: mdk4 beacon -a mutual-exclusion crash + mdk4 deauth -B direct targeting; found via real Kali/mdk4 4.2 testing)
+> Last updated: 2026-10-28 (HARDWARE-TESTED pass 9 — Bug 20: Software Evil Twin crashed entire program on single card; added global per-attack crash safety net)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -561,6 +561,29 @@ try:
 
 #### Note: standalone deauth options are Scapy-only (not yet hardware-confirmed)
 `run_multivector_eviction()` (menu option 3) and the `deauth_only` path use the pure-Scapy `AdvancedEviction` engine, NOT mdk4/aireplay. Bugs 18-19 do not touch them. If standalone deauth still feels weak on real hardware after these fixes, the next step is to add an mdk4 `-B` / aireplay `-0` injection path alongside the Scapy frames there too. Pending live test feedback.
+
+---
+
+#### Bug 20: Software Evil Twin CRASHED THE ENTIRE PROGRAM (unhandled TimeoutExpired) — CONFIRMED on hardware
+**File:** `wifi_nightmare/evil_twin_software.py` (`_create_ap_interface`, `_get_phy_name`) + `wifi_nightmare/main.py` (`scan_workflow`)  
+**Symptom (live traceback):** Selecting Software Evil Twin (option 7) on a single card raised `subprocess.TimeoutExpired: Command '['airmon-ng', 'start', 'wlan0']' timed out after 15 seconds`, which propagated all the way up through `scan_workflow` → `main_loop` → `start` → `entry_point` and **killed the whole program** ("Critical Error").  
+**Root cause (chain):**
+1. Software Evil Twin is given `self.original_interface` = `wlan0`, but by then the app has already turned that card into `wlan0mon` (monitor). `wlan0` no longer exists in sysfs.
+2. `_get_phy_name()` only looked up `self.interface` (`wlan0`) → every method failed → returned `None`.
+3. With `phy == None`, `_create_ap_interface()` skipped the VIF-creation path entirely and fell through to `airmon-ng start wlan0`.
+4. `airmon-ng start wlan0` hung on the non-existent interface → 15s timeout → `TimeoutExpired`, which was **not caught**, so it crashed the entire program.
+5. A latent bug too: `_get_phy_name` method 1 returned `"0"` from `"wiphy 0"` instead of `"phy0"`.  
+**Fixes:**
+- `_get_phy_name()` now resolves the phy against the original name, its `mon` sibling, and any live wireless interface (the phy is the same physical radio regardless of interface name), and correctly returns `phyN`.
+- The `airmon-ng start` fallback is wrapped in try/except (TimeoutExpired + generic) so it can never crash the program.
+- `_create_ap_interface()` now validates the chosen AP interface actually exists in sysfs before returning success; if a single card in monitor mode can't provide an AP-capable interface, it returns `False` with a clear message ("a second adapter is required, or use the Hardware ESP Evil Twin") instead of letting hostapd fail later.
+- **General safety net:** `scan_workflow()`'s entire action-dispatch is now wrapped in try/except. ANY attack that raises is caught, logged, and returns the user to the target menu — a single attack can never again take down the whole tool.  
+**How it was found:** Real hardware testing — user ran Software Evil Twin and pasted the full crash traceback.
+
+---
+
+#### Note: standalone "Deauth only" has no dedicated menu entry
+The target menu (ui.py `target_items`) has no top-level "Deauth" option. Standalone deauth lives under option **3 (Multi-Vector Eviction) → sub-choice 3 "Standard Deauth Burst Flood"**. The `deauth_only` mode in `run_attack()` exists but is not wired to any menu action. If a dedicated top-level Deauth entry is wanted, it needs adding to `target_items` + a new `scan_workflow` branch. Not a regression from recent changes.
 
 ---
 

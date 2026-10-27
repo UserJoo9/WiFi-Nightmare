@@ -901,12 +901,20 @@ log-async
                 run_command(["ip", "link", "set", mon_name, "up"])
                 self._mon_interface = mon_name
 
-        # Fallback to airmon-ng if manual VIF creation was not supported
+        # Fallback to airmon-ng if manual VIF creation was not supported.
+        # Wrap it: airmon-ng can hang (it was timing out on a non-existent
+        # interface and the TimeoutExpired propagated all the way up and
+        # crashed the entire program). A failure here must stay contained.
         if not self._mon_interface:
-            subprocess.run(
-                ["airmon-ng", "start", self.interface],
-                capture_output=True, text=True, timeout=15
-            )
+            try:
+                subprocess.run(
+                    ["airmon-ng", "start", self.interface],
+                    capture_output=True, text=True, timeout=15
+                )
+            except subprocess.TimeoutExpired:
+                logger.warning("airmon-ng start timed out during Software Evil Twin AP setup")
+            except Exception as e:
+                logger.warning(f"airmon-ng start failed during AP setup: {e}")
             time.sleep(1)
 
             iw_out = subprocess.run(["iw", "dev"], capture_output=True, text=True, timeout=5)
@@ -920,37 +928,80 @@ log-async
                     self._mon_interface = iface
                     break
 
-        self.ap_interface = self.interface
+        # Decide which interface hostapd will bind as the AP, and VALIDATE it
+        # actually exists. On a single card already in monitor mode, the
+        # original name (e.g. 'wlan0') no longer exists, so blindly returning
+        # it here made hostapd fail later with a confusing error. If we have a
+        # real AP VIF use it; otherwise fall back to the original name only if
+        # it still exists in sysfs.
+        if not (self.ap_interface and os.path.exists(f"/sys/class/net/{self.ap_interface}")):
+            if os.path.exists(f"/sys/class/net/{self.interface}"):
+                self.ap_interface = self.interface
+            else:
+                print(f"{C_RED}[!] Could not create an AP-capable interface for the "
+                      f"Software Evil Twin.{C_RESET}")
+                print(f"{C_YELLOW}[i] '{self.interface}' is in monitor mode as a single "
+                      f"card, and this adapter/driver can't run AP + monitor at the same "
+                      f"time. A second Wi-Fi adapter is required for the Software Evil "
+                      f"Twin, or use the Hardware ESP Evil Twin instead.{C_RESET}")
+                logger.error("Software Evil Twin: no AP-capable interface could be created")
+                return False
         return True
 
     def _get_phy_name(self):
-        """Get the phy name for the interface."""
-        # Method 1: from iw dev info
+        """Get the phy name of the physical card.
+
+        self.interface is the ORIGINAL name we were launched with (e.g.
+        'wlan0'), but by the time a Software Evil Twin runs the app has
+        already put that card into monitor mode as 'wlan0mon' -- so 'wlan0'
+        no longer exists in sysfs and every lookup against it fails,
+        returning None. That made _create_ap_interface() skip the VIF path
+        entirely and fall through to `airmon-ng start wlan0`, which hangs on
+        a non-existent interface and used to crash the whole program.
+
+        The phy is the same physical radio regardless of the interface name,
+        so we look it up against the original name, its 'mon' sibling, and
+        finally any live wireless interface.
+        """
+        candidates = [self.interface, f"{self.interface}mon"]
+        if self.interface.endswith("mon"):
+            candidates.append(self.interface[:-3])
         try:
-            result = subprocess.run(
-                ["iw", "dev", self.interface, "info"],
-                capture_output=True, text=True, timeout=5
-            )
-            for line in result.stdout.splitlines():
-                if "wiphy" in line.lower():
-                    return line.strip().split()[-1]
+            out = subprocess.run(["iw", "dev"], capture_output=True,
+                                 text=True, timeout=5).stdout
+            for line in out.splitlines():
+                line = line.strip()
+                if line.startswith("Interface"):
+                    name = line.split()[-1]
+                    if name not in candidates:
+                        candidates.append(name)
         except Exception:
             pass
 
-        # Method 2: from sysfs
-        try:
-            with open(f"/sys/class/net/{self.interface}/phy80211/name") as f:
-                return f.read().strip()
-        except Exception:
-            pass
-
-        # Method 3: from sysfs index
-        try:
-            with open(f"/sys/class/net/{self.interface}/phy80211/index") as f:
-                return f"phy{f.read().strip()}"
-        except Exception:
-            pass
-
+        for iface in candidates:
+            # Method 1: iw dev <iface> info -> "wiphy N"  (becomes phyN)
+            try:
+                result = subprocess.run(
+                    ["iw", "dev", iface, "info"],
+                    capture_output=True, text=True, timeout=5
+                )
+                for line in result.stdout.splitlines():
+                    if "wiphy" in line.lower():
+                        return f"phy{line.strip().split()[-1]}"
+            except Exception:
+                pass
+            # Method 2: sysfs name
+            try:
+                with open(f"/sys/class/net/{iface}/phy80211/name") as f:
+                    return f.read().strip()
+            except Exception:
+                pass
+            # Method 3: sysfs index
+            try:
+                with open(f"/sys/class/net/{iface}/phy80211/index") as f:
+                    return f"phy{f.read().strip()}"
+            except Exception:
+                pass
         return None
 
     def _setup_ap_interface(self):

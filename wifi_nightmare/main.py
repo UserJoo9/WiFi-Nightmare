@@ -529,63 +529,75 @@ class WifiGTR:
 
             action = ui.menu_input("Select Action: ")
 
-            if action == '1': # Handshake
-                self.run_attack((bssid, channel), mode="handshake")
-            elif action == '2': # Reveal
-                self.run_attack((bssid, channel), mode="reveal")
-            elif action == '3': # Multi-Vector Eviction (PMF Bypass)
-                self.run_multivector_eviction(bssid, channel, ssid_name)
-            elif action == '4': # Passive
-                self.run_attack((bssid, channel), mode="passive")
-            elif action == '5': # Gen Hash
-                # Generate hc22000
-                info = self.db.get_info(bssid)
-                if info and info.get('HSFile') and os.path.exists(info['HSFile']):
-                     utils.generate_hc22000(info['HSFile'])
-                     input("Press Enter to return to menu...")
+            try:
+                if action == '1': # Handshake
+                    self.run_attack((bssid, channel), mode="handshake")
+                elif action == '2': # Reveal
+                    self.run_attack((bssid, channel), mode="reveal")
+                elif action == '3': # Multi-Vector Eviction (PMF Bypass)
+                    self.run_multivector_eviction(bssid, channel, ssid_name)
+                elif action == '4': # Passive
+                    self.run_attack((bssid, channel), mode="passive")
+                elif action == '5': # Gen Hash
+                    # Generate hc22000
+                    info = self.db.get_info(bssid)
+                    if info and info.get('HSFile') and os.path.exists(info['HSFile']):
+                         utils.generate_hc22000(info['HSFile'])
+                         input("Press Enter to return to menu...")
+                    else:
+                        print(f"{C_RED}[!] No handshake file found for this target.{C_RESET}")
+                        if info and info.get('HSFile'):
+                             print(f"    Missing file: {info['HSFile']}")
+                        print(f"{C_YELLOW}[*] Capture a handshake first (Option 1).{C_RESET}")
+                        time.sleep(2)
+                elif action == '6': # Evil Twin Logic (ESP)
+                    if self.esp_driver and self.esp_driver.is_connected:
+                        self.run_eviltwin_workflow(bssid, channel, ssid_name)
+                    else:
+                        time.sleep(1)
+                elif action == '7': # Software Evil Twin
+                    self.run_software_eviltwin(bssid, channel, ssid_name)
+                elif action == '8': # Pixie Dust
+                    if not PixieDustAttack:
+                        print(f"{C_RED}[!] Pixie Dust module not loaded.{C_RESET}")
+                        time.sleep(1)
+                    else:
+                        if not net_info.get('WPS'):
+                            print(f"{C_YELLOW}[!] WPS not detected on this target. Attack may fail.{C_RESET}")
+                            confirm = input(f"{C_YELLOW}[?] Try anyway? (y/n): {C_RESET}").strip().lower()
+                            if confirm != 'y':
+                                continue
+                        self.run_pixie_dust_workflow(bssid, channel, ssid_name)
+                elif action == '9': # Crack with aircrack-ng
+                    self.run_aircrack_crack(bssid, ssid_name)
+                elif action == '10': # WPA3 Downgrade Attack
+                    self.run_wpa3_downgrade(bssid, channel, ssid_name)
+                elif action == '11': # PMKID Attack
+                    self.run_pmkid_attack(bssid, channel, ssid_name)
+                elif action == '12': # Karma Attack
+                    self.run_karma_attack(bssid, channel, ssid_name)
+                elif action == '13': # Beacon Flood
+                    self.run_beacon_flood(bssid, channel, ssid_name)
+                elif action == '14': # WPA Enterprise Evil Twin
+                    self.run_wpa_enterprise(bssid, channel, ssid_name)
+                elif action == '15': # Smart Crack
+                    self.run_smart_crack(bssid, ssid_name)
+                elif action == '0':
+                    break
                 else:
-                    print(f"{C_RED}[!] No handshake file found for this target.{C_RESET}")
-                    if info and info.get('HSFile'):
-                         print(f"    Missing file: {info['HSFile']}")
-                    print(f"{C_YELLOW}[*] Capture a handshake first (Option 1).{C_RESET}")
-                    time.sleep(2)
-            elif action == '6': # Evil Twin Logic (ESP)
-                if self.esp_driver and self.esp_driver.is_connected:
-                    self.run_eviltwin_workflow(bssid, channel, ssid_name)
-                else:
+                    print(f"\n{C_RED}[!] Invalid option.{C_RESET}")
                     time.sleep(1)
-            elif action == '7': # Software Evil Twin
-                self.run_software_eviltwin(bssid, channel, ssid_name)
-            elif action == '8': # Pixie Dust
-                if not PixieDustAttack:
-                    print(f"{C_RED}[!] Pixie Dust module not loaded.{C_RESET}")
-                    time.sleep(1)
-                else:
-                    if not net_info.get('WPS'):
-                        print(f"{C_YELLOW}[!] WPS not detected on this target. Attack may fail.{C_RESET}")
-                        confirm = input(f"{C_YELLOW}[?] Try anyway? (y/n): {C_RESET}").strip().lower()
-                        if confirm != 'y':
-                            continue
-                    self.run_pixie_dust_workflow(bssid, channel, ssid_name)
-            elif action == '9': # Crack with aircrack-ng
-                self.run_aircrack_crack(bssid, ssid_name)
-            elif action == '10': # WPA3 Downgrade Attack
-                self.run_wpa3_downgrade(bssid, channel, ssid_name)
-            elif action == '11': # PMKID Attack
-                self.run_pmkid_attack(bssid, channel, ssid_name)
-            elif action == '12': # Karma Attack
-                self.run_karma_attack(bssid, channel, ssid_name)
-            elif action == '13': # Beacon Flood
-                self.run_beacon_flood(bssid, channel, ssid_name)
-            elif action == '14': # WPA Enterprise Evil Twin
-                self.run_wpa_enterprise(bssid, channel, ssid_name)
-            elif action == '15': # Smart Crack
-                self.run_smart_crack(bssid, ssid_name)
-            elif action == '0':
-                break
-            else:
-                print(f"\n{C_RED}[!] Invalid option.{C_RESET}")
-                time.sleep(1)
+            except KeyboardInterrupt:
+                print(f"\n{C_YELLOW}[*] Attack interrupted \u2014 back to target menu.{C_RESET}")
+                time.sleep(0.5)
+            except Exception as e:
+                logger.exception(f"Target action {action} crashed: {e}")
+                print(f"\n{C_RED}[!] This attack failed, but the program is still running.{C_RESET}")
+                print(f"{C_RED}    Reason: {e}{C_RESET}")
+                try:
+                    input("Press Enter to return to menu...")
+                except Exception:
+                    pass
 
     def run_multivector_eviction(self, bssid, channel, ssid):
         """Run intelligent multi-vector eviction (Deauth + CSA + BTM) to bypass PMF."""
