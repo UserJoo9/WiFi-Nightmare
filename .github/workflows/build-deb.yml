@@ -17,7 +17,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential devscripts debhelper dh-python python3-all python3-setuptools python3-build dpkg-dev
+          sudo apt-get install -y build-essential devscripts debhelper dh-python python3-all python3-setuptools python3-build dpkg-dev apt-utils
 
       - name: Build Debian package
         run: |
@@ -28,8 +28,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Extract the matching section from CHANGELOG.md
-          # e.g. tag "v3.0.0" matches section header "## [3.0.0]"
           VERSION="${GITHUB_REF_NAME#v}"
           NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
 
@@ -37,7 +35,6 @@ jobs:
             NOTES="Release ${GITHUB_REF_NAME}"
           fi
 
-          # Delete any existing release from a previous run to avoid conflicts
           gh release delete "$GITHUB_REF_NAME" --yes 2>/dev/null || true
 
           gh release create "$GITHUB_REF_NAME" \
@@ -48,31 +45,56 @@ jobs:
       - name: Update APT repository on gh-pages
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          # Save absolute paths before switching branches
           DEB_FILE=$(realpath ../wifi-nightmare_*.deb)
           cp install.sh /tmp/wifi-nightmare-install.sh
 
-          # Switch to gh-pages branch (create orphan if missing)
           git fetch origin gh-pages 2>/dev/null || true
           git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
           git rm -rf . 2>/dev/null || true
 
-          # Create APT repo structure
           mkdir -p pool/main/w/wifi-nightmare/
           mkdir -p dists/stable/main/binary-amd64/
 
-          # Copy .deb and install script
           cp "$DEB_FILE" pool/main/w/wifi-nightmare/
           cp /tmp/wifi-nightmare-install.sh install.sh
 
-          # Generate Packages metadata
           dpkg-scanpackages --multiversion pool/ > dists/stable/main/binary-amd64/Packages
           gzip -k -f dists/stable/main/binary-amd64/Packages
 
-          # Generate Release file with proper hashes and date
-          apt-ftparchive release dists/stable > dists/stable/Release 2>/dev/null
+          # Generate Release file without apt-ftparchive
+          cd dists/stable
+          PKGS=main/binary-amd64/Packages
+          PKGS_GZ=main/binary-amd64/Packages.gz
+          MD5=$(md5sum $PKGS | awk '{print $1}')
+          SHA1=$(sha1sum $PKGS | awk '{print $1}')
+          SHA256=$(sha256sum $PKGS | awk '{print $1}')
+          SIZE=$(stat -c%s $PKGS)
+          MD5_GZ=$(md5sum $PKGS_GZ | awk '{print $1}')
+          SHA1_GZ=$(sha1sum $PKGS_GZ | awk '{print $1}')
+          SHA256_GZ=$(sha256sum $PKGS_GZ | awk '{print $1}')
+          SIZE_GZ=$(stat -c%s $PKGS_GZ)
+          DATE=$(date -Ru)
+          cat > Release <<RELEASE_EOF
+Origin: WiFi-Nightmare
+Label: WiFi-Nightmare
+Suite: stable
+Codename: stable
+Architectures: amd64
+Components: main
+Description: WiFi-Nightmare APT repository
+Date: $DATE
+MD5Sum:
+ $MD5 $SIZE $PKGS
+ $MD5_GZ $SIZE_GZ $PKGS_GZ
+SHA1:
+ $SHA1 $SIZE $PKGS
+ $SHA1_GZ $SIZE_GZ $PKGS_GZ
+SHA256:
+ $SHA256 $SIZE $PKGS
+ $SHA256_GZ $SIZE_GZ $PKGS_GZ
+RELEASE_EOF
+          cd ../..
 
-          # Commit and push
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
           git add .
