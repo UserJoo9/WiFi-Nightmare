@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-28 (HARDWARE-TESTED pass 9 — Bug 20: Software Evil Twin crashed entire program on single card; added global per-attack crash safety net)
+> Last updated: 2026-10-28 (pass 10 — Bug 21: Software Evil Twin detected phy after deleting the only interface; + standalone Deauth Flood menu option 16)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -584,6 +584,18 @@ try:
 
 #### Feature: standalone "Deauth Flood" menu option (option 16)
 Added a dedicated top-level Deauth option to the target menu. `run_deauth_flood()` (main.py) runs a continuous flood using every available method at once for maximum reliability: mdk4 `-B <bssid>` (or aireplay-ng `-0 0` broadcast if mdk4 is absent) as a background process, PLUS Scapy multi-vector bursts (broadcast deauth + disassoc + CSA) and targeted Scapy deauth for every client discovered live on the sniffer interface. Runs until Ctrl+C. Wired as `target_items` entry "16" in ui.py and an `action == '16'` branch in `scan_workflow` (inside the crash-safety try/except from Bug 20).
+
+---
+
+#### Bug 21: Software Evil Twin detected the phy AFTER deleting the only interface (single-card AP creation always failed)
+**File:** `wifi_nightmare/evil_twin_software.py` — `_create_ap_interface()`, `_get_phy_name()`  
+**Symptom:** After the Bug 20 crash fix, Software Evil Twin stopped crashing but ALWAYS failed with "Could not create an AP-capable interface" on a single card — even on cards that do support AP mode.  
+**Root cause:** `_create_ap_interface()` ran its "remove leftover interfaces" teardown (which deletes the live `wlan0mon`) **before** calling `_get_phy_name()`. On a single card, once `wlan0mon` is deleted there is no wireless netdev left, so `_get_phy_name()` returned `None`, the `if phy:` VIF-creation block was skipped entirely, and it fell through to the hanging airmon-ng path → graceful failure. The card could actually host the AP; the code just destroyed its only means of finding the phy first.  
+**Fixes:**
+- Detect the phy at the very TOP of `_create_ap_interface()`, before any interface teardown (while `wlan0mon` still exists).
+- Added an `iw phy` fallback to `_get_phy_name()` that lists PHYs even when zero network interfaces exist — bulletproofs single-card setups where the vif was already torn down.  
+Now the AP vif is created on the freed phy as intended (airgeddon-style) instead of bailing out.  
+**Status:** Structural fix, pending live retest on the single-card adapter.
 
 ---
 

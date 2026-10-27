@@ -850,14 +850,27 @@ log-async
 
         self._mon_interface = None
 
+        # CRITICAL: detect the phy FIRST, while the live monitor VIF (e.g.
+        # wlan0mon) still exists. The teardown loop below deletes that VIF,
+        # and on a single card that leaves NO wireless netdev to derive the
+        # phy from -- which made _get_phy_name() return None, skip AP-vif
+        # creation entirely, and fall through to the hanging airmon-ng path.
+        phy = self._get_phy_name()
+
         # Kill interfering processes
         run_command(["airmon-ng", "check", "kill"])
         time.sleep(1)
 
-        # Remove leftover interfaces
+        # Remove leftover interfaces (this frees the phy so an AP vif can be
+        # added; it also deletes the app's current monitor VIF, which is why
+        # we grabbed `phy` above first).
         for old in [ap_name, mon_name, f"{self.interface}_mon"]:
             run_command(["iw", "dev", old, "del"])
         time.sleep(0.3)
+
+        # Re-detect only if we somehow still don't have it.
+        if not phy:
+            phy = self._get_phy_name()
 
         # Check what interfaces exist now
         iw_out = subprocess.run(["iw", "dev"], capture_output=True, text=True, timeout=5)
@@ -865,8 +878,6 @@ log-async
         for line in iw_out.stdout.splitlines():
             if line.strip().startswith("Interface"):
                 existing_ifaces.append(line.strip().split()[-1])
-
-        phy = self._get_phy_name()
         # Atheros AR9271 (ath9k_htc) and mac80211 drivers support 1 AP + 1 Monitor interface
         # simultaneously on the same physical chip! We create ap_name and mon_name on the phy.
         if phy:
@@ -1002,6 +1013,19 @@ log-async
                     return f"phy{f.read().strip()}"
             except Exception:
                 pass
+
+        # Last resort: ask `iw phy` directly. This lists PHYs even when NO
+        # network interface exists on them (e.g. right after the only vif was
+        # deleted), so it is the reliable fallback for a single-card setup.
+        try:
+            out = subprocess.run(["iw", "phy"], capture_output=True,
+                                 text=True, timeout=5).stdout
+            for line in out.splitlines():
+                line = line.strip()
+                if line.lower().startswith("wiphy "):
+                    return line.split()[-1]  # "Wiphy phy0" -> "phy0"
+        except Exception:
+            pass
         return None
 
     def _setup_ap_interface(self):
