@@ -182,6 +182,7 @@ def print_target_menu(ssid, bssid, channel, client_count, crypto="Unknown", vend
         ("13", "Beacon Flood Attack", "High-frequency fake AP beacon storm", C_GREEN, ""),
         ("14", "WPA-Enterprise Evil Twin", "Rogue 802.1X AP + fake RADIUS logger", C_GREEN, ""),
         ("15", "Smart Crack (Smart+rockyou)", "SSID-smart wordlist generator + rockyou", C_GREEN, ""),
+        ("16", "Deauth Flood (Standalone)", "Continuously disconnect all clients from the AP", C_RED, ""),
         ("0", "Back to Scan", "Return to live network discovery hopper", C_RED, ""),
     ]
 

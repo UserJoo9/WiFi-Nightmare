@@ -582,8 +582,8 @@ try:
 
 ---
 
-#### Note: standalone "Deauth only" has no dedicated menu entry
-The target menu (ui.py `target_items`) has no top-level "Deauth" option. Standalone deauth lives under option **3 (Multi-Vector Eviction) → sub-choice 3 "Standard Deauth Burst Flood"**. The `deauth_only` mode in `run_attack()` exists but is not wired to any menu action. If a dedicated top-level Deauth entry is wanted, it needs adding to `target_items` + a new `scan_workflow` branch. Not a regression from recent changes.
+#### Feature: standalone "Deauth Flood" menu option (option 16)
+Added a dedicated top-level Deauth option to the target menu. `run_deauth_flood()` (main.py) runs a continuous flood using every available method at once for maximum reliability: mdk4 `-B <bssid>` (or aireplay-ng `-0 0` broadcast if mdk4 is absent) as a background process, PLUS Scapy multi-vector bursts (broadcast deauth + disassoc + CSA) and targeted Scapy deauth for every client discovered live on the sniffer interface. Runs until Ctrl+C. Wired as `target_items` entry "16" in ui.py and an `action == '16'` branch in `scan_workflow` (inside the crash-safety try/except from Bug 20).
 
 ---
 

