@@ -443,6 +443,10 @@ class WifiGTR:
             cloudflared_bin=cloudflared_bin
         )
         et.run()
+        # A Software Evil Twin run switches the card to AP mode and tears the
+        # monitor VIF down. Restore monitor mode so scanning and every later
+        # injection attack works again instead of failing with "No such device".
+        self._ensure_injector_ready()
         input(f"\n{C_YELLOW}Press Enter to return...{C_RESET}")
 
     def cleanup(self):
@@ -604,6 +608,47 @@ class WifiGTR:
                 except Exception:
                     pass
 
+    def _ensure_injector_ready(self, channel=None):
+        """Make sure the monitor interface still exists and is in monitor mode.
+
+        An AP-mode attack (Software / WPA-Enterprise Evil Twin) tears the
+        monitor VIF down and switches the card to AP mode. Afterwards the app
+        still thinks the injector is e.g. 'wlan0mon', so every later injection
+        fails with 'No such device'. This detects that, rebuilds monitor mode
+        on the physical card, and re-syncs our interface names.
+        Returns True if a usable monitor interface is ready.
+        """
+        def _is_mon(iface):
+            return bool(iface and os.path.exists(f"/sys/class/net/{iface}")
+                        and utils._get_iw_mode(iface) == "monitor")
+
+        if _is_mon(self.injector_interface):
+            if channel:
+                utils.run_command(["ip", "link", "set", self.injector_interface, "up"])
+                utils.run_command(["iw", "dev", self.injector_interface, "set", "channel", str(channel)])
+            return True
+
+        print(f"{C_YELLOW}[*] Monitor interface '{self.injector_interface}' is gone "
+              f"(a prior AP-mode attack reset the card). Rebuilding monitor mode...{C_RESET}")
+        new_iface = utils.enable_monitor_mode(self.original_interface)
+        if new_iface and os.path.exists(f"/sys/class/net/{new_iface}"):
+            # Single-card: sniffer and injector are the same card -> both move.
+            single = (self.sniffer_interface == self.injector_interface)
+            self.interface = new_iface
+            self.sniffer_interface = new_iface
+            self.injector_interface = new_iface
+            if not single:
+                logger.info("Dual-card resync fell back to single interface after AP attack")
+            if channel:
+                utils.run_command(["ip", "link", "set", new_iface, "up"])
+                utils.run_command(["iw", "dev", new_iface, "set", "channel", str(channel)])
+            print(f"{C_GREEN}[+] Monitor mode restored on {new_iface}.{C_RESET}")
+            return True
+
+        print(f"{C_RED}[!] Could not restore monitor mode on {self.original_interface}. "
+              f"Try re-running the tool.{C_RESET}")
+        return False
+
     def run_deauth_flood(self, bssid, channel, ssid):
         """Standalone continuous Deauth flood.
 
@@ -619,6 +664,14 @@ class WifiGTR:
         print(f"BSSID   : {utils.mask_bssid(bssid)}")
         print(f"Channel : {C_YELLOW}{channel}{C_RESET}")
         print(f"{C_YELLOW}[*] Flooding deauth — press Ctrl+C to stop.{C_RESET}")
+
+        # Self-heal: if a prior Evil Twin run tore down the monitor interface,
+        # rebuild it before we try to inject (otherwise every frame fails with
+        # "No such device").
+        if not self._ensure_injector_ready(channel):
+            print(f"{C_RED}[!] Deauth aborted: no usable monitor interface.{C_RESET}")
+            input("Press Enter to return to menu...")
+            return
 
         # Lock both cards to the target channel (injector does the injecting;
         # in dual-card mode it is a different physical card from the sniffer).
@@ -745,6 +798,11 @@ class WifiGTR:
         print(f"{C_WHITE}[2] PMF Stealth Only (CSA + 802.11v BTM - No Deauth){C_RESET}")
         print(f"{C_WHITE}[3] Standard Deauth Burst Flood{C_RESET}")
         choice = input(f"{C_YELLOW}[?]{C_RESET} Mode [1]: ").strip() or '1'
+
+        if not self._ensure_injector_ready(channel):
+            print(f"{C_RED}[!] Eviction aborted: no usable monitor interface.{C_RESET}")
+            input(f"\n{C_YELLOW}Press Enter to return to menu...{C_RESET}")
+            return
 
         utils.run_command(["ip", "link", "set", self.interface, "up"])
         utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
@@ -1022,7 +1080,14 @@ class WifiGTR:
         if NetworkAttacker is None:
             print(f"{C_RED}[!] Error: NetworkAttacker module not available.{C_RESET}")
             return
-        
+
+        # Self-heal the monitor interface if a prior AP-mode attack tore it down.
+        if not self._ensure_injector_ready(channel):
+            print(f"{C_RED}[!] Attack aborted: no usable monitor interface.{C_RESET}")
+            if not auto_exit:
+                input("\nPress Enter to return to menu...")
+            return
+
         utils.run_command(["ip", "link", "set", self.interface, "up"])
         utils.run_command(["iw", "dev", self.interface, "set", "channel", str(channel)])
         # "reveal"/"passive" build NetworkAttacker(interface=self.injector_interface)

@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-28 (pass 11 — Bug 22: Software Evil Twin AP vif created via hostapd-managed iface, graceful on cards without AP+monitor; confirmed on WN722N v1/AR9271)
+> Last updated: 2026-10-28 (pass 12 — Bug 23: monitor interface not restored after Evil Twin -> injection self-heal + error-flood guard)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -610,6 +610,20 @@ Now the AP vif is created on the freed phy as intended (airgeddon-style) instead
 - `run()` deauth setup: when no monitor vif exists, it points the deauth interface at the AP interface (so `_deauth_thread` detects the AP interface and skips injection gracefully) instead of trying to convert a non-existent original interface. The fake AP + captive portal run with a clear "integrated deauth is OFF — use a 2nd adapter or the standalone Deauth option" notice.  
 **Net result:** single-card Software Evil Twin now runs the fake AP + captive portal (no integrated deauth, which is a genuine hardware limit of this adapter), instead of failing outright.  
 **Status:** Structural fix based on confirmed `iw` behavior; pending live retest.
+
+---
+
+#### Bug 23: After an Evil Twin run the monitor interface was gone, so every later injection spammed "No such device" forever — CONFIRMED on hardware
+**Files:** `wifi_nightmare/eviction.py`, `wifi_nightmare/main.py`  
+**Symptom (live):** The Software Evil Twin AP now comes up (Bug 22 fixed), but it switches the card to AP mode and deletes the monitor VIF (`wlan0mon`). After exiting it, running Deauth Flood (or any injection) failed on every single frame with `Deauth injection FAILED: wlan0mon is down or not in monitor mode` / `CSA injection OSError ... [Errno 19] No such device`, printed **hundreds of times per second** in a tight loop (no rate limiting), because the app still thought the injector was `wlan0mon`.  
+**Root causes:**
+1. The app never rebuilt/re-synced its monitor interface after an AP-mode attack tore it down; `self.injector_interface` still pointed at the deleted `wlan0mon`.
+2. `AdvancedEviction` printed the same error on every call with no backoff, so a dead interface produced an endless error flood.  
+**Fixes:**
+- `AdvancedEviction` now has an `_iface_dead` flag: the first "No such device" / "Network is down" marks the engine dead and all further injection calls return 0 silently (one error, then quiet) instead of spamming.
+- New `WifiGTR._ensure_injector_ready(channel)` helper: checks the monitor interface still exists and is in monitor mode; if not, rebuilds it via `enable_monitor_mode(original_interface)` and re-syncs `self.interface/sniffer_interface/injector_interface`. Called at the start of `run_deauth_flood`, `run_multivector_eviction`, and `run_attack` (aborts cleanly if it can't restore), and proactively right after `run_software_eviltwin` so scanning + every later attack works again.  
+**Net result:** injection attacks now self-heal the monitor interface after an Evil Twin run instead of failing with an endless error flood.  
+**How it was found:** real hardware testing — user ran Software Evil Twin then Deauth Flood and pasted the error flood.
 
 ---
 

