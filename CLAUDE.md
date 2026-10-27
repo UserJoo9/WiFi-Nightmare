@@ -1,6 +1,6 @@
 # CLAUDE.md — WiFi-Nightmare Developer Reference
 
-> Last updated: 2026-10-28 (pass 10 — Bug 21: Software Evil Twin detected phy after deleting the only interface; + standalone Deauth Flood menu option 16)
+> Last updated: 2026-10-28 (pass 11 — Bug 22: Software Evil Twin AP vif created via hostapd-managed iface, graceful on cards without AP+monitor; confirmed on WN722N v1/AR9271)
 > This file documents the full architecture, attack workflows, known bugs, and fix history for WiFi-Nightmare.  
 > **Read this before starting any analysis or modification session** — it prevents re-analyzing from scratch.
 
@@ -596,6 +596,20 @@ Added a dedicated top-level Deauth option to the target menu. `run_deauth_flood(
 - Added an `iw phy` fallback to `_get_phy_name()` that lists PHYs even when zero network interfaces exist — bulletproofs single-card setups where the vif was already torn down.  
 Now the AP vif is created on the freed phy as intended (airgeddon-style) instead of bailing out.  
 **Status:** Structural fix, pending live retest on the single-card adapter.
+
+---
+
+#### Bug 22: Software Evil Twin created the AP vif as `type ap` via iw (fails on ath9k_htc) + assumed AP+monitor always possible — CONFIRMED on WN722N v1
+**File:** `wifi_nightmare/evil_twin_software.py` — `_create_ap_interface()`, `run()` deauth setup  
+**Symptom:** On a TP-Link WN722N v1 (Atheros AR9271 / ath9k_htc) the AP interface was never created, so Software Evil Twin always failed with the generic "could not create AP-capable interface" message — even though the card fully supports AP mode.  
+**Root causes (two, confirmed via live `iw` testing):**
+1. The code created the AP interface with `iw phy <phy> interface add wlan0_ap type ap`. On ath9k_htc this returns exit 2 with `"You need to run a management daemon, e.g. hostapd"` and does NOT create the interface. The correct approach (airgeddon/wifiphisher style) is to create a **managed** interface and let **hostapd** switch it to AP mode.
+2. The card's `valid interface combinations` contain NO `monitor` alongside AP (`#{managed,P2P-client}<=2, #{AP,mesh,P2P-GO}<=2, total<=2`) — i.e. it **cannot run AP + monitor concurrently**. The code assumed it could and, when the monitor vif failed, the `run()` deauth-setup tried to force the ORIGINAL interface name into monitor mode — but on a single card that name no longer exists, breaking the whole run.  
+**Fixes:**
+- `_create_ap_interface()` now creates the AP vif as `type managed` (falling back to `__ap`), validates it via sysfs, brings it up, and lets hostapd do the AP-mode switch. The monitor vif is now strictly best-effort; if the adapter can't do AP+monitor it logs that and the AP still runs.
+- `run()` deauth setup: when no monitor vif exists, it points the deauth interface at the AP interface (so `_deauth_thread` detects the AP interface and skips injection gracefully) instead of trying to convert a non-existent original interface. The fake AP + captive portal run with a clear "integrated deauth is OFF — use a 2nd adapter or the standalone Deauth option" notice.  
+**Net result:** single-card Software Evil Twin now runs the fake AP + captive portal (no integrated deauth, which is a genuine hardware limit of this adapter), instead of failing outright.  
+**Status:** Structural fix based on confirmed `iw` behavior; pending live retest.
 
 ---
 

