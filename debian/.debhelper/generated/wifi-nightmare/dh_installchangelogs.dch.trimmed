@@ -1,0 +1,127 @@
+wifi-nightmare (3.0.4) unstable; urgency=medium
+
+  * CONFIRMED on real hardware (Kali Linux, TP-Link WN722N v1 / AR9271) --
+    every fix in this release was reproduced and verified live, unlike the
+    previous [UNTESTED] 3.0.3 release.
+  * Fix: Beacon Flood always failed instantly because mdk4's -a flag was
+    being combined with -n/-f/-v, which are mutually exclusive (Bug 18).
+  * Fix: mdk4 deauth used the mdk3-era -b <blacklist file> mode instead of
+    direct -B <BSSID> active targeting, on every mdk4 call site (Bug 19).
+  * Fix: Software Evil Twin could crash the entire program via an uncaught
+    TimeoutExpired; also added a crash safety net around every menu action
+    so no single attack can take the whole program down again (Bug 20).
+  * Fix: Software Evil Twin detected the phy after deleting its only
+    interface, making single-card AP creation always fail (Bug 21).
+  * Fix: Software Evil Twin created the AP vif with the wrong iw interface
+    type for ath9k_htc-class cards; now tries managed+hostapd first, and
+    labels cards that cannot run AP + monitor concurrently instead of
+    failing (Bug 22).
+  * Fix: after an Evil Twin run tore down the monitor interface, every later
+    injection attempt spammed "No such device"/"Network is down" errors
+    hundreds of times per second; added a circuit breaker and a self-healing
+    monitor-mode check before every injection path (Bug 23).
+  * Feature: added a standalone "Deauth Flood" menu option with a live
+    redrawing client table (masked MAC, vendor, per-client packet count).
+  * UX: scan/saved-network lists now number from 1 instead of 0.
+  * UX: menu option number brackets are a uniform green across every menu.
+  * UX: removed the stale hardcoded "v3.0.0" title from the live dashboard
+    panel; the version number now shows in the main menu only.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Wed, 28 Oct 2026 02:12:00 +0300
+
+wifi-nightmare (3.0.3) unstable; urgency=medium
+
+  * UNTESTED release candidate -- bundles deep-scan passes 4-7 (Bugs 9-17),
+    code-reviewed and logically verified but NOT yet run against real hardware.
+  * Fix startup: adapter-existence check no longer silently falls back to an
+    unrelated wlan0/wlan0mon/mon0 when the requested interface is missing (Bug 9).
+  * Fix dual-card: monitor-mode check could falsely match a leftover wlan0mon
+    from the first card while preparing the second card (Bug 9).
+  * Fix: handshake capture dropped previously-seen clients between deauth
+    bursts instead of accumulating them (Bug 10).
+  * Fix: ESP-driven Evil Twin attack reverted the shared injector card to
+    managed mode on exit, silently breaking deauth for the rest of the run (Bug 11).
+  * Fix: Software Evil Twin restored the primary radio to managed mode and
+    restarted NetworkManager on exit, silently breaking the rest of the run (Bug 12).
+  * Fix: WPA-Enterprise Evil Twin now switches the interface to managed mode
+    before starting hostapd if it was left in monitor mode.
+  * Fix: Karma Attack silently reported success when airbase-ng crashed
+    instantly instead of falling back to the Scapy engine (Bug 13).
+  * Fix: Beacon Flood had the identical silent-failure bug with mdk4/mdk3 (Bug 14).
+  * Fix: WPA3 Downgrade sent CSA frames with no channel lock on the injector (Bug 15).
+  * Fix: Mass Attack never re-tuned the injector card per target, missing
+    deauth on every target after the first in dual-card mode (Bug 16).
+  * Fix: run_attack()'s Reveal/Passive deauth path never synced the injector's
+    channel, making Reveal's deauth a silent no-op in dual-card setups (Bug 17).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Thu, 22 Oct 2026 09:00:00 +0300
+
+wifi-nightmare (3.0.2) unstable; urgency=medium
+
+  * Fix dual-card: EvilTwin deauth was injecting on sniffer card (Bug 8).
+  * Fix dual-card: mass-attack and scanner sniffed on injector card (Bug 7).
+  * Fix dual-card: WPS workflow used wrong interface on all 4 code paths (Bug 6).
+  * Fix dual-card: EAPOL handshake sniffer ran on injector instead of sniffer (Bug 5).
+  * Fix crash: addr1/addr2/addr3 NameError on non-Dot11 EAPOL packets (Bug 4).
+  * Fix dual-card: OSError recovery brought up wrong interface in scan/mass-attack loops.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Sun, 19 Oct 2026 18:00:00 +0300
+
+wifi-nightmare (3.0.1) unstable; urgency=medium
+
+  * PMKID Attack: clientless WPA2 hash harvesting for Hashcat mode 22000.
+  * Karma Attack: auto-respond to 802.11 Probe Requests to attract clients.
+  * Beacon Flooding: high-frequency 802.11 Beacon storm with custom SSIDs.
+  * WPA-Enterprise Fake RADIUS: rogue 802.1X AP harvesting PEAP/TTLS credentials.
+  * Smart Wordlists & Auto-Rockyou: SSID-aware candidate generation + ISP defaults.
+  * Session Export: JSON, CSV, and human-readable report export.
+  * Rich TUI Live Dashboard: real-time scanner with RSSI bars and security badges.
+  * Geo-Location BSSID Lookup: resolve AP location via Wigle.net and OpenWifi APIs.
+  * Multi-Card Aggregation Engine: dedicated Sniffer + Injector role assignment.
+  * Dual-Band Scanning: 2.4 GHz + 5 GHz channel hopping simultaneously.
+  * WPA3/SAE Transition Downgrade Attack: force fallback to WPA2-PSK via CSA.
+  * Multi-Vector Eviction: bypass 802.11w PMF via CSA and BTM requests.
+  * WPS PBC Sniffer: capture WPA-PSK on physical WPS button press.
+  * Algorithmic Known-PINs: offline ComputePIN, D-Link, EasyBox generators.
+  * WPA3 & PMF Detection in live scanner.
+  * Redesigned 2-column horizontal grid UI with per-option descriptions.
+  * Monitor mode now uses airmon-ng as primary method (iw as fallback).
+  * Automatic monitor interface name detection from airmon-ng output.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Fri, 17 Oct 2026 08:00:00 +0000
+
+wifi-nightmare (2.1.2) unstable; urgency=medium
+
+  * Captive portal now triggers on Android 14/15, Samsung One UI 6/7, iOS, ColorOS, Xiaomi MIUI, Vivo Funtouch.
+  * Disabled DHCP option 114 when no valid HTTPS tunnel (cloudflared) is active.
+  * Port 443 rejected with TCP Reset so HTTPS-first probes fall back to HTTP immediately.
+  * All OS probe paths (Android, Apple, Samsung, Oppo, Xiaomi, Vivo) respond with 302 Found + Location header.
+  * Fixed captive portal incorrectly rejecting correct passwords: removed -b/-e ESSID filters from aircrack-ng verify.
+  * Fixed deauth failing with single-card setup (TL-WN722N v1 / Atheros AR9271): VIF AP + monitor interfaces created simultaneously.
+  * Fixed hidden SSID not persisting in menu after reveal.
+  * Fixed BSSID fully displayed in Deauth and other outputs.
+  * Fixed Evil Twin password capture stripping leading/trailing spaces.
+  * Added Option 9 in target menu: crack handshake with aircrack-ng + wordlist (live output, saves to cracked.txt).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Tue, 29 Sep 2026 13:35:00 +0000
+
+wifi-nightmare (2.1.1) unstable; urgency=medium
+
+  * BSSID masking for privacy: all BSSIDs shown as first/last octet only across the TUI and exported files.
+  * Export files named by SSID instead of full BSSID (handshakes, pixie dust logs, hc22000).
+  * Faster handshake capture: kick-once + long silent window strategy, 1s polling, deauth tool errors surfaced.
+  * Pixie Dust: accurate WPS lock-state detection from wash, quote-stripped PIN/PSK parsing, failure diagnosis.
+  * VIF support check: PHY-scoped iw list parsing, no more false multi-interface support reports.
+  * Removed emoji icons from all menus.
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Fri, 07 Aug 2026 12:00:00 +0000
+
+wifi-nightmare (2.1.0) unstable; urgency=medium
+
+  * Initial Debian packaging for APT-based install.
+  * Pre-compiled ESP firmware bundled in /usr/share/wifi-nightmare/.
+  * Runtime data stored in /var/lib/wifi-nightmare/.
+  * Configuration overrides in /etc/wifi-nightmare/config.yaml.
+  * System dependencies auto-resolved via apt (aircrack-ng, iw, hcxtools, etc.).
+
+ -- Youssef Alkhodary <youssef@alkhodary.com>  Sun, 19 Jul 2026 12:00:00 +0000

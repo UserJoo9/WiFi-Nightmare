@@ -1,0 +1,20 @@
+Package: wifi-nightmare
+Version: 3.0.4
+Architecture: all
+Maintainer: Youssef Alkhodary <youssef@alkhodary.com>
+Installed-Size: 2394
+Depends: python3 (>= 3.9), python3-scapy (>= 2.7.0), python3-serial (>= 3.5), python3-yaml, esptool, aircrack-ng, hcxtools, iw, python3:any
+Recommends: hostapd, dnsmasq, mdk4, reaver, pixiewps, python3-rich
+Section: net
+Priority: optional
+Homepage: https://github.com/YoussefAlkhodary/WiFi-Nightmare
+Description: Advanced WiFi security auditing and penetration testing tool
+ WiFi-Nightmare is an advanced WiFi security auditing and penetration
+ testing tool. It combines a Python CLI with optional ESP32/ESP8266
+ firmware for Evil Twin, Deauthentication, Handshake capture, WPS
+ Pixie Dust, and captive portal attacks.
+ .
+ v3.0.0 features: PMKID Attack, Karma Attack, Beacon Flooding,
+ WPA-Enterprise Fake RADIUS, Smart Wordlists, Session Export,
+ Rich TUI Dashboard, Geo-Location BSSID Lookup, Multi-Card Engine,
+ Dual-Band Scanning, WPA3/SAE Downgrade, and more.
